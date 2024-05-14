@@ -1,0 +1,31 @@
+[package]
+name = "work_timer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+hal = { package = "esp-hal", version = "0.16", default-features = false  ,features = ["esp32c3","async","embassy","embassy-time-timg0","embassy-executor-thread" ,"rt", "vectored"]}
+esp-backtrace = { version = "0.11", features = ["esp32c3", "panic-handler", "exception-handler","println"] }
+esp-println       = { version = "0.9", features = ["esp32c3"] }
+esp-wifi = {version ="0.4", features = ["esp32c3", "async", "wifi","embassy-net","tcp","udp"] }
+
+embedded-graphics = {version= "0.8",features = ["fixed"] }
+u8g2-fonts = { version="0.4.0",features = ["embedded_graphics_textstyle"] }
+lcd_drivers={path="../lcd_drivers/lcd_drivers",features = ["async","uc1638"]}
+
+static_cell = { version = "2.0.0",features = ["nightly"] }
+futures = {version = "0.3.30",default-features = false,features = ["alloc"]}
+
+embassy-executor = { version = "0.5" ,features = ["nightly", "integrated-timers", "arch-riscv32"]}
+embassy-time = { version = "0.3",features = [] }
+embassy-net = { version = "0.4",features = ["dhcpv4","udp","tcp","dns"] }
+embassy-futures = { version = "0.1" }
+embassy-sync = {version = "0.5.0"}
+
+
+embedded-hal = { version = "1", default-features = false }
+embedded-io-async = {version = "0.6"}
+embedded-hal-async={version = "1.0"}
+embedded-hal-bus ={version = "0.1",features = ["async"]}
+embedded-alloc = { version = "0.5"}
+rotary-encoder-embedded={version = "0.2.0"}

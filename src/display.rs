@@ -3,6 +3,8 @@ use alloc::string::{String, ToString};
 use core::cell::RefCell;
 use core::fmt::Debug;
 use core::ops::Add;
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::channel::Channel;
 use embassy_time::{Delay, Duration, Timer};
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::geometry::Point;
@@ -24,9 +26,10 @@ use embedded_graphics::{Drawable, Pixel};
 use esp_println::{print, println};
 use lcd_drivers::graphics::TwoBitColorDisplay;
 
+pub struct RenderInfo;
 
-static mut DISPLAY:Option<Display2in7>  = None;
-
+pub static mut DISPLAY:Option<Display2in7>  = None;
+pub static RENDER_CHANNEL: Channel<CriticalSectionRawMutex,RenderInfo, 64> = Channel::new();
 #[embassy_executor::task]
 pub async  fn render(mut spi:  SpiDma<'static,SPI2, Channel0, hal::spi::FullDuplexMode>,
                            cs: Gpio9<Output<PushPull>>,
@@ -40,6 +43,7 @@ pub async  fn render(mut spi:  SpiDma<'static,SPI2, Channel0, hal::spi::FullDupl
     let mut display = Display2in7::default();
     display.clear(TwoBitColor::White);
 
+    let receiver = RENDER_CHANNEL.receiver();
     unsafe {
         DISPLAY.replace(display);
     }
@@ -50,13 +54,17 @@ pub async  fn render(mut spi:  SpiDma<'static,SPI2, Channel0, hal::spi::FullDupl
     draw_text_2(display_mut().unwrap(),"render:123",10,50,TwoBitColor::Black);
 
     loop {
+        println!("wait render refresh");
+        let renderInfo = receiver.receive().await;
+
+        println!("render refresh");
 
         lcd.goto(&mut spi_device,0,0).await;
         unsafe {
             lcd.put_char(&mut spi_device, DISPLAY.as_mut().unwrap().buffer()).await;
         }
 
-        Timer::after(Duration::from_nanos(50)).await;
+        Timer::after(Duration::from_millis(5)).await;
     }
 
 }

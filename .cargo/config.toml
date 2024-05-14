@@ -1,0 +1,15 @@
+[target.riscv32imc-unknown-none-elf]
+runner = "espflash flash --baud 1152000 --monitor "
+
+[build]
+rustflags = [
+  "-C", "link-arg=-Tlinkall.x",
+  "-C", "link-arg=-Trom_functions.x",
+  "-C", "force-frame-pointers",
+]
+#"--cfg", "portable_atomic_unsafe_assume_single_core"
+target = "riscv32imc-unknown-none-elf"
+
+[env]
+CC = "riscv32-esp-elf-gcc"
+AR = "riscv32-esp-elf-ar"

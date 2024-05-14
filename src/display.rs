@@ -22,11 +22,15 @@ use embedded_hal::digital::OutputPin;
 use lcd_drivers::color::TwoBitColor;
 use lcd_drivers::uc1638::prelude::Display2in7;
 use embedded_graphics::{Drawable, Pixel};
+use embedded_graphics::prelude::Size;
+use embedded_graphics::primitives::Rectangle;
 
 use esp_println::{print, println};
 use lcd_drivers::graphics::TwoBitColorDisplay;
 
-pub struct RenderInfo;
+pub struct RenderInfo{
+    pub num:i32
+}
 
 pub static mut DISPLAY:Option<Display2in7>  = None;
 pub static RENDER_CHANNEL: Channel<CriticalSectionRawMutex,RenderInfo, 64> = Channel::new();
@@ -57,7 +61,9 @@ pub async  fn render(mut spi:  SpiDma<'static,SPI2, Channel0, hal::spi::FullDupl
         println!("wait render refresh");
         let renderInfo = receiver.receive().await;
 
-        println!("render refresh");
+        display_mut().unwrap().fill_solid(&Rectangle::new(Point::new(10,50),Size::new(100,40)),TwoBitColor::White);
+        draw_text_2(display_mut().unwrap(),format!("render:{}", renderInfo.num).as_str(),10,50,TwoBitColor::Black);
+        println!("render refresh:{}",renderInfo.num);
 
         lcd.goto(&mut spi_device,0,0).await;
         unsafe {

@@ -31,9 +31,12 @@ pub async fn task(mut a_point :Gpio1<Input<PullUp>>,mut b_point :Gpio0<Input<Pul
 
     let mut begin_state = BeginState::NO_STATE;
     let renderSender = display::RENDER_CHANNEL.sender();
+    // 初始化编码器状态
+    let mut last_a_state = a_point.is_low();
+    let mut last_b_state = b_point.is_low();
 
     // 开始监听编码器状态变化
-    let mut num = 0;
+    let mut num:i32 = 0;
     loop {
         //select( a_point.wait_for_any_edge(),b_point.wait_for_any_edge()).await;
         a_point.wait_for_any_edge().await;
@@ -95,14 +98,14 @@ pub async fn task(mut a_point :Gpio1<Input<PullUp>>,mut b_point :Gpio0<Input<Pul
             if(!b_is_down){
                 if begin_state == FRONT  {
                     println!("正转");
-                    num +=1;
-                    renderSender.send(RenderInfo).await;
+                    num +=10;
+                    renderSender.send(RenderInfo{num}).await;
                 }
             }else if(b_is_down){
                 if begin_state == BACK {
                     println!("反转");
-                    num -=1;
-                    renderSender.send(RenderInfo).await;
+                    num -=10;
+                    renderSender.send(RenderInfo{num}).await;
                 }
             }
             begin_state = NO_STATE;
@@ -123,18 +126,22 @@ pub async fn task(mut a_point :Gpio1<Input<PullUp>>,mut b_point :Gpio0<Input<Pul
         如果是正转，此时 状态为 AL BH
         如果是反转，此时 状态为 AH BL
      */
-       /* if current_a_state != last_a_state || current_b_state != last_b_state {
+       /* let mut current_a_state = a_point.is_low();
+        let mut current_b_state = b_point.is_low();
+        if current_a_state != last_a_state || current_b_state != last_b_state {
             if last_a_state.unwrap() && last_b_state.unwrap() {
                 if current_a_state.unwrap() && !current_b_state.unwrap() {
                     // 正转
                     num = num + 1;
                     println!("正转");
                     println!("num :{}", num);
+                    renderSender.send(RenderInfo{num}).await;
                 } else if !current_a_state.unwrap() && current_b_state.unwrap() {
                     // 反转
                     num = num - 1;
                     println!("反转");
                     println!("num :{}", num);
+                    renderSender.send(RenderInfo{num}).await;
                 }
             }
             // 更新状态

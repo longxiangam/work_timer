@@ -3,6 +3,8 @@ use alloc::vec;
 use alloc::vec::Vec;
 use core::convert::Infallible;
 use core::future::Future;
+use core::ops::Deref;
+use core::pin::Pin;
 use embassy_futures::select::{Either, Either4, select, Select, select4};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
@@ -11,12 +13,13 @@ use embassy_time::{Duration, Instant, Timer};
 use embedded_hal::digital::InputPin;
 use embedded_hal_async::digital::Wait;
 use esp_println::println;
+use futures::FutureExt;
 use hal::gpio::{Gpio11, Gpio5, Gpio8, Gpio9, Input, PullUp};
 use hal::prelude::_embedded_hal_digital_v2_InputPin;
 
 use crate::pages::Page;
 
-#[derive(Eq, PartialEq,Copy,Clone,Debug)]
+#[derive(Eq, PartialEq,Debug)]
 pub enum EventType{
     KeyShort(u32),
     KeyLongStart(u32),
@@ -29,21 +32,20 @@ pub struct EventInfo{
 }
 
 
+
 struct Listener{
-    callback:Box<dyn FnMut() +  Send + Sync>,
+    callback:Box< dyn FnMut() -> (Pin<Box< dyn Future<Output = ()> + Send + Sync + 'static>>)  + Send + Sync + 'static>,
     event_type:EventType
 }
 
 static LISTENER:Mutex<CriticalSectionRawMutex,Vec<Listener>>  = Mutex::new(vec![]) ;
 pub async fn on<F>(event_type: EventType, callback: F)
-where F: FnMut() + Send + Sync + 'static,
+where F: FnMut() -> (Pin<Box<dyn Future<Output=()> + Send + Sync + 'static>>) + Send + Sync + 'static,
 {
-
     LISTENER.lock().await.push(Listener{callback:Box::new(callback),event_type});
 }
 
-pub async fn un<F>(event_type: EventType)
-    where F: FnMut(),
+pub async fn un(event_type: EventType)
 {
     let mut vec = LISTENER.lock().await;
 
@@ -66,7 +68,21 @@ pub async fn clear(){
 
 pub async fn toggle_event(event_type: EventType,ms:u64){
     println!("event_type:{:?}",event_type);
+    let mut vec = LISTENER.lock().await;
+    for mut listener in vec.iter_mut() {
+        if listener.event_type == event_type{
+            //Pin::clone(&listener.callback).await ;
+            //<core::pin::Pin<Box<dyn futures::Future<Output = ()> + core::marker::Send + Sync>> as Clone>::clone(&listener.callback).await;
+           /* listener.callback.await;*/
+           // let callback_future = listener.callback.clone();
+            //let callback_future = Pin::from(listener.callback.as_ref().clone());
+           //Rc::clone(listener.callback.as_ref());
+           /* let callback = listener.callback.as_ref().clone();
 
+            callback.deref().await;*/
+            (listener.callback)().await;
+        }
+    }
 
 }
 

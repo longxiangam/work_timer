@@ -1,12 +1,12 @@
 use core::future::Future;
 use crate::pages::Page;
 
-pub struct  CountDown{
+pub struct  CountDownPage{
     begin_count:u32,
     current_count:u32,
 }
 
-impl Page for CountDown{
+impl Page for CountDownPage{
     fn new() -> Self {
         Self{
             begin_count:0,

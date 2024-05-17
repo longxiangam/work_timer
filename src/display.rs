@@ -5,7 +5,7 @@ use core::fmt::Debug;
 use core::ops::Add;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
-use embassy_time::{Delay, Duration, Timer};
+use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::geometry::Point;
 use embedded_graphics::mono_font::MonoTextStyleBuilder;
@@ -13,7 +13,7 @@ use embedded_graphics::text::{Baseline, Text, TextStyleBuilder};
 use embedded_hal_bus::spi::ExclusiveDevice;
 
 use hal::dma::Channel0;
-use hal::gpio::{Gpio10, Gpio11, Gpio19, Gpio3, Gpio6, Gpio7, Gpio9, Output, Pin, PushPull};
+use hal::gpio::{Gpio10, Gpio11, Gpio19, Gpio2, Gpio3, Gpio6, Gpio7, Gpio9, Output, Pin, PushPull};
 use hal::peripherals::SPI2;
 use hal::spi::master::dma::SpiDma;
 use lcd_drivers::prelude::Lcd2in7;
@@ -29,14 +29,14 @@ use esp_println::{print, println};
 use lcd_drivers::graphics::TwoBitColorDisplay;
 
 pub struct RenderInfo{
-    pub num:i32
+    pub time:i32
 }
 
 pub static mut DISPLAY:Option<Display2in7>  = None;
 pub static RENDER_CHANNEL: Channel<CriticalSectionRawMutex,RenderInfo, 64> = Channel::new();
 #[embassy_executor::task]
 pub async  fn render(mut spi:  SpiDma<'static,SPI2, Channel0, hal::spi::FullDuplexMode>,
-                           cs: Gpio9<Output<PushPull>>,
+                           cs: Gpio2<Output<PushPull>>,
                            rst: Gpio10<Output<PushPull>>,
                            dc: Gpio3<Output<PushPull>>)
 {
@@ -52,28 +52,24 @@ pub async  fn render(mut spi:  SpiDma<'static,SPI2, Channel0, hal::spi::FullDupl
         DISPLAY.replace(display);
     }
 
-    println!("render:123");
-    draw_text_2(display_mut().unwrap(),"render:123",10,10,TwoBitColor::Black);
-    draw_text_2(display_mut().unwrap(),"render:123",10,30,TwoBitColor::Black);
-    draw_text_2(display_mut().unwrap(),"render:123",10,50,TwoBitColor::Black);
 
     loop {
         println!("wait render refresh");
+
         let renderInfo = receiver.receive().await;
 
-        display_mut().unwrap().fill_solid(&Rectangle::new(Point::new(10,50),Size::new(100,40)),TwoBitColor::White);
-        draw_text_2(display_mut().unwrap(),format!("render:{}", renderInfo.num).as_str(),10,50,TwoBitColor::Black);
-        println!("render refresh:{}",renderInfo.num);
+        println!("render refresh:{}",renderInfo.time);
 
         lcd.goto(&mut spi_device,0,0).await;
         unsafe {
             lcd.put_char(&mut spi_device, DISPLAY.as_mut().unwrap().buffer()).await;
         }
 
-        Timer::after(Duration::from_millis(5)).await;
+        Timer::after(Duration::from_millis(50)).await;
     }
 
 }
+
 
 
 pub fn display_mut()->Option<&'static mut Display2in7>{

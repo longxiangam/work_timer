@@ -1,5 +1,6 @@
 use core::cell::RefCell;
 use core::future::Future;
+use embassy_executor::Spawner;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Timer};
@@ -13,8 +14,10 @@ mod count_down_page;
 
 pub trait Page {
     fn new() ->Self;
-    fn render(&self) -> impl Future<Output=()> +Send;
-    fn run(&mut self)-> impl Future<Output=()> +Send;
+    fn render(&self) -> impl Future<Output=()> +Send +Sync;
+   /* fn run(&mut self)-> impl Future<Output=()> +Send +Sync;*/
+    async fn  run(&mut self);
+
 }
 
 
@@ -22,9 +25,9 @@ static MAIN_PAGE:Mutex<CriticalSectionRawMutex,RefCell<Option<MainPage>> > = Mut
 static COUNT_DOWN_PAGE:Mutex<CriticalSectionRawMutex,RefCell<Option<CountDownPage>> > = Mutex::new(RefCell::new(None));
 
 #[embassy_executor::task]
-pub async fn main_task(){
+pub async fn main_task(spawner:Spawner){
     MAIN_PAGE.lock().await.get_mut().replace(MainPage::new());
-    MainPage::init().await;
+    MainPage::init(spawner).await;
     loop {
 
        /* let temp = MAIN_PAGE.lock().await;

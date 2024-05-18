@@ -1,4 +1,5 @@
 use core::future::Future;
+use embassy_executor::Spawner;
 use crate::pages::Page;
 
 pub struct  CountDownPage{
@@ -6,7 +7,7 @@ pub struct  CountDownPage{
     current_count:u32,
 }
 
-impl Page for CountDownPage{
+/*impl Page for CountDownPage{
     fn new() -> Self {
         Self{
             begin_count:0,
@@ -18,7 +19,7 @@ impl Page for CountDownPage{
         todo!()
     }
 
-    async fn run(&mut self) {
+    async fn run(&mut self,spawner:Spawner) {
         todo!()
     }
-}
+}*/

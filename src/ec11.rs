@@ -86,7 +86,7 @@ pub async fn task(mut a_point :Gpio1<Input<PullUp>>,mut b_point :Gpio0<Input<Pul
                 }
             }else if(b_is_down){
                 if begin_state == BACK {
-                    toggle_event(EventType::WheelFront,Instant::now().as_millis()).await;
+                    toggle_event(EventType::WheelBack,Instant::now().as_millis()).await;
                 }
             }
             begin_state = NO_STATE;

@@ -23,6 +23,7 @@ use crate::pages::Page;
 pub enum EventType{
     KeyShort(u32),
     KeyLongStart(u32),
+    KeyLongIng(u32),
     KeyLongEnd(u32),
     KeyDouble(u32),
     WheelBack,
@@ -72,7 +73,6 @@ pub async fn toggle_event(event_type: EventType,ms:u64){
     for mut listener in vec.iter_mut() {
         if listener.event_type == event_type{
             //Pin::clone(&listener.callback).await ;
-            //<core::pin::Pin<Box<dyn futures::Future<Output = ()> + core::marker::Send + Sync>> as Clone>::clone(&listener.callback).await;
            /* listener.callback.await;*/
            // let callback_future = listener.callback.clone();
             //let callback_future = Pin::from(listener.callback.as_ref().clone());
@@ -135,6 +135,8 @@ where P:InputPin
                 if !is_long {
                     is_long = true;
                     toggle_event(EventType::KeyLongStart(Num as u32), current).await;
+                }else {
+                    toggle_event(EventType::KeyLongIng(Num as u32), current).await;
                 }
             }
         } else if is_low_times < 2 {

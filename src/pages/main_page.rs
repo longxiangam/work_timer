@@ -30,6 +30,7 @@ pub struct MainPage{
     current_page:u32,
     choose_index:u32,
     is_long_start:bool,
+    need_render:bool,
 }
 
 impl MainPage {
@@ -37,6 +38,7 @@ impl MainPage {
     pub async fn init(spawner: Spawner){
         MAIN_PAGE.lock().await.get_mut().replace(MainPage::new());
         spawner.spawn(increase()).ok();
+        spawner.spawn(decrease()).ok();
         Self::bind_event().await;
     }
 
@@ -54,7 +56,7 @@ impl MainPage {
         event::on(EventType::KeyShort(1),  move ||  {
             println!("current_page:" );
             return Box::pin(async {
-                Self::get_mut().await.unwrap().choose_index += 1;
+                Self::get_mut().await.unwrap().increase();
                 println!("current_page:{}",Self::get_mut().await.unwrap().choose_index );
             });
         }).await;
@@ -71,18 +73,57 @@ impl MainPage {
                 INCREASE_CHANNEL.send(false).await;
             });
         }).await;
+        event::on(EventType::KeyLongStart(2),  ||  {
+            println!("current_page:" );
+            return Box::pin( async {
+                DECREASE_CHANNEL.send(true).await;
+            });
+        }).await;
 
+        event::on(EventType::KeyLongEnd(2),  ||  {
+            println!("current_page:" );
+            return Box::pin( async {
+                DECREASE_CHANNEL.send(false).await;
+            });
+        }).await;
         event::on(EventType::KeyShort(2),  ||  {
             println!("current_page:" );
             return Box::pin( async {
-                Self::get_mut().await.unwrap().choose_index -= 1;
+                Self::get_mut().await.unwrap().decrease();
+                println!("current_page:{}",Self::get_mut().await.unwrap().choose_index );
+            });
+        }).await;
+
+        event::on(EventType::WheelFront,  ||  {
+            println!("current_page:" );
+            return Box::pin( async {
+                Self::get_mut().await.unwrap().increase();
+                println!("current_page:{}",Self::get_mut().await.unwrap().choose_index );
+            });
+        }).await;
+
+        event::on(EventType::WheelBack,  ||  {
+            println!("current_page:" );
+            return Box::pin( async {
+                Self::get_mut().await.unwrap().decrease();
                 println!("current_page:{}",Self::get_mut().await.unwrap().choose_index );
             });
         }).await;
     }
 
-    async fn test(spawner: Spawner){
-        spawner.spawn(increase()).ok();
+
+    fn increase(&mut self){
+        if self.choose_index < 500 {
+            self.choose_index += 1;
+            self.need_render = true;
+        }
+    }
+
+    fn decrease(&mut self){
+        if self.choose_index > 0 {
+            self.choose_index -= 1;
+            self.need_render = true;
+        }
     }
 }
 impl Page for  MainPage{
@@ -92,17 +133,21 @@ impl Page for  MainPage{
             current_page:0,
             choose_index:0,
             is_long_start:false,
+            need_render:true,
         }
     }
     //通过具体的状态绘制
-    async fn render(&self) {
-        if let Some(display) = display_mut() {
-            display_mut().unwrap().fill_solid(&Rectangle::new(Point::new(10,50),Size::new(100,40)),TwoBitColor::White);
-            draw_text_2(display_mut().unwrap(),format!("render:{}", self.choose_index).as_str(),10,50,TwoBitColor::Black);
-            RENDER_CHANNEL.send(RenderInfo{time:0}).await;
-            println!("has display:{}",self.choose_index);
-        }else{
-            println!("no display");
+    async fn render(&mut self) {
+        if self.need_render {
+            self.need_render = false;
+            if let Some(display) = display_mut() {
+                display_mut().unwrap().fill_solid(&Rectangle::new(Point::new(10, 50), Size::new(100, 40)), TwoBitColor::White);
+                draw_text_2(display_mut().unwrap(), format!("render:{}", self.choose_index).as_str(), 10, 50, TwoBitColor::Black);
+                RENDER_CHANNEL.send(RenderInfo { time: 0 }).await;
+                println!("has display:{}", self.choose_index);
+            } else {
+                println!("no display");
+            }
         }
     }
 
@@ -125,6 +170,7 @@ impl Page for  MainPage{
 
 
 static INCREASE_CHANNEL:Channel<CriticalSectionRawMutex,bool, 2> = Channel::new();
+static DECREASE_CHANNEL:Channel<CriticalSectionRawMutex,bool, 2> = Channel::new();
 #[embassy_executor::task]
 async fn increase(){
     loop {
@@ -134,16 +180,35 @@ async fn increase(){
             let b = INCREASE_CHANNEL.receive();
             match select(a,b).await {
                 Either::First(_) => {
-                    MainPage::get_mut().await.unwrap().choose_index += 1;
+                    MainPage::get_mut().await.unwrap().increase();
                 }
                 Either::Second(_) => {
                     break;
                 }
             }
         }
-
         Timer::after(Duration::from_millis(100)).await;
     }
 }
 
+
+#[embassy_executor::task]
+async fn decrease(){
+    loop {
+        DECREASE_CHANNEL.receive().await;
+        loop {
+            let a = Timer::after(Duration::from_millis(100));
+            let b = DECREASE_CHANNEL.receive();
+            match select(a,b).await {
+                Either::First(_) => {
+                    MainPage::get_mut().await.unwrap().decrease();
+                }
+                Either::Second(_) => {
+                    break;
+                }
+            }
+        }
+        Timer::after(Duration::from_millis(100)).await;
+    }
+}
 

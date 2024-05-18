@@ -14,7 +14,7 @@ mod count_down_page;
 
 pub trait Page {
     fn new() ->Self;
-    fn render(&self) -> impl Future<Output=()> +Send +Sync;
+    fn render(&mut self) -> impl Future<Output=()> +Send +Sync;
    /* fn run(&mut self)-> impl Future<Output=()> +Send +Sync;*/
     async fn  run(&mut self);
 
@@ -35,6 +35,6 @@ pub async fn main_task(spawner:Spawner){
         let main_page = mut_ref.as_mut().unwrap();*/
         MainPage::get_mut().await.unwrap().run().await;
 
-        Timer::after(Duration::from_millis(100)).await;
+        Timer::after(Duration::from_millis(50)).await;
     }
 }

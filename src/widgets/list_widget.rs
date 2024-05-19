@@ -13,13 +13,16 @@ use u8g2_fonts::{FontRenderer, U8g2TextStyle};
 use u8g2_fonts::fonts;
 use u8g2_fonts::types::{FontColor, HorizontalAlignment, VerticalPosition};
 
+const ITEM_HEIGHT:u32 = 20;
 //每个widget 包含状态与绘制，widget 没有业务逻辑只有通过对应事件回调触发
 pub struct ListWidget<C>{
     title:&'static str,
     position:Point,
+    offset_position:Point,
     size:Size,
     front_color:C,
     back_color:C,
+    choose_index:usize,
     items:Vec<ListItemWidget<C>>,
 }
 
@@ -27,31 +30,90 @@ pub struct ListWidget<C>{
 impl <C: Clone> ListWidget<C>{
     pub fn new(position: Point,front_color:C,back_color:C,size: Size,title:&'static str,items:Vec<&'static str>) ->Self{
         let mut list_items = vec![];
-        let item_size = Size::new(size.width,20);
+        let item_size = Size::new(size.width,ITEM_HEIGHT);
         for (index,item) in items.iter().enumerate() {
-            let item_position = Point::new(position.x,position.y + (index) as i32 *20 );
+            let item_position =  Point::new(position.x,position.y + (index) as i32 * ITEM_HEIGHT as i32 );
             let list_item = ListItemWidget::new(item_position,front_color.clone(),back_color.clone(),item_size,item);
             list_items.push(list_item);
         }
         Self{
             title,
             position ,
+            offset_position:position ,
             size,
             front_color,
             back_color,
+            choose_index: 0,
             items: list_items,
         }
     }
 
     pub fn choose(&mut self,index:usize){
-        for (i,item) in self.items.iter_mut().enumerate() {
+        if index > self.items.len() {
+            return;
+        }
+
+        for (i, item) in self.items.iter_mut().enumerate() {
             if i == index {
                 item.is_choose = true;
             } else {
                 item.is_choose = false;
             }
         }
+
+        self.choose_index = index;
+        let offset_position = self.offset_by_choose(self.choose_index);
+        self.offset_position = offset_position;
+
+        let positions: Vec<Point> = (0..self.items.len())
+            .map(|index| self.item_position(index))
+            .collect();
+        for (index, item) in self.items.iter_mut().enumerate() {
+            item.set_position(positions[index]);
+        }
+
     }
+
+
+    pub fn content_height(&self)->u32{
+        return self.items.len() as u32 * ITEM_HEIGHT;
+    }
+
+    pub fn offset_by_choose(&self,index:usize)->Point{
+        if self.content_height() < self.size.height {
+            return self.position;
+        }
+
+        //最后一个项显示需要偏移的高度
+        let last_item_can_show_y =   self.content_height() - self.size.height   ;
+
+
+       let item_y =  index as u32 * ITEM_HEIGHT;
+        //选择的item 的y 坐标大于 中间坐标时 向上移动 这个item - 半屏的高度
+        if item_y > self.size.height / 2 {
+
+            //偏移大于最后一个项能显示的高度时，直接用最后一项能显示的偏移
+            if item_y > last_item_can_show_y {
+                return self.position - Point::new(0, last_item_can_show_y as i32);
+            }
+
+
+           return self.position - Point::new(0, (item_y - self.size.height /2 ) as i32);
+        }
+        self.position
+    }
+
+    pub fn item_position(&self,index:usize)->Point{
+        let offset_position = self.offset_by_choose(self.choose_index);
+        let item_position = Point::new(offset_position.x,offset_position.y + (index) as i32 * ITEM_HEIGHT as i32 );
+        return item_position;
+    }
+
+
+    pub fn item_len(&self)->usize{
+        return self.items.len();
+    }
+
 }
 
 impl <C> Drawable for  ListWidget<C> where C:PixelColor{
@@ -103,6 +165,11 @@ impl <C: Clone>ListItemWidget<C>{
     }
 }
 
+impl <C> ListItemWidget<C>{
+    pub fn set_position(&mut self,position:Point){
+        self.position = position;
+    }
+}
 
 impl <C> Drawable for  ListItemWidget<C>  where C:PixelColor{
     type Color = C;
@@ -130,14 +197,14 @@ impl <C> Drawable for  ListItemWidget<C>  where C:PixelColor{
 
         let mut tag = "-";
         if self.is_choose {
-            tag = "+";
+            tag = "*";
         }
 
 
         let font: FontRenderer = FontRenderer::new::<fonts::u8g2_font_wqy16_t_gb2312>();
         font.render_aligned(
             format_args!("{} {}",tag, self.label),
-            self.position+Point::new(20,5),
+            self.position+Point::new(10,5),
             VerticalPosition::Top,
             HorizontalAlignment::Left,
             FontColor::Transparent(self.front_color),

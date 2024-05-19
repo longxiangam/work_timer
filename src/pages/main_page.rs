@@ -128,7 +128,7 @@ impl MainPage {
 
 
     fn increase(&mut self){
-        if self.choose_index < 2 {
+        if self.choose_index < 9 {
             self.choose_index += 1;
             self.need_render = true;
         }
@@ -139,6 +139,12 @@ impl MainPage {
             self.choose_index -= 1;
             self.need_render = true;
         }
+    }
+
+    async fn back(&mut self){
+        self.current_page = 0;
+        self.need_render = true;
+        Self::bind_event().await;
     }
 }
 impl Page for  MainPage{
@@ -202,7 +208,7 @@ impl Page for  MainPage{
                                                   ,TwoBitColor::White
                                                   ,display.bounding_box().size
                                                   ,"主菜单"
-                        ,vec!["菜单项1","菜单项2","菜单项3"]
+                        ,vec!["菜单项1","菜单项2","菜单项3","菜单项4","菜单项5","菜单项1","菜单项2","菜单项3","菜单项4","菜单项5"]
 
                 );
                 list_widget.choose(self.choose_index as usize);
@@ -222,19 +228,13 @@ impl Page for  MainPage{
         loop {
             if self.current_page == 0 {
                 //监听事件
-                println!("main_pages");
-
-
-
                 self.render().await;
             } else if self.current_page == 1 {
                 let mut count_down = CountDownPage::new();
                 CountDownPage::init(spawner).await;
                 count_down.run(spawner).await;
                 //切换到主页并绑定事件
-                self.current_page = 0;
-                self.need_render = true;
-                Self::bind_event().await;
+                self.back().await;
             }
             Timer::after(Duration::from_millis(50)).await;
         }

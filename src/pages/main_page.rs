@@ -1,5 +1,5 @@
 use alloc::boxed::Box;
-use alloc::format;
+use alloc::{format, vec};
 use core::cell::RefCell;
 use core::convert::Infallible;
 use embassy_executor::Spawner;
@@ -30,6 +30,7 @@ use crate::display::{display_mut, draw_text_2, RENDER_CHANNEL, RenderInfo};
 use crate::event::EventType;
 use crate::pages::count_down_page::{ CountDownPage};
 use crate::pages::{ Page};
+use crate::widgets::list_widget::ListWidget;
 
 static MAIN_PAGE:Mutex<CriticalSectionRawMutex,RefCell<Option<MainPage>> > = Mutex::new(RefCell::new(None));
 pub static MAIN_PAGE_CHANNEL: Channel<CriticalSectionRawMutex,MainPageInfo, 64> = Channel::new();
@@ -158,7 +159,7 @@ impl Page for  MainPage{
                 display.clear(TwoBitColor::White);
              /*   display_mut().unwrap().fill_solid(&Rectangle::new(Point::new(10, 50), Size::new(100, 40)), TwoBitColor::White);
                 draw_text_2(display_mut().unwrap(), format!("render:{}", self.choose_index).as_str(), 10, 50, TwoBitColor::Black);*/
-                let style = MonoTextStyleBuilder::new()
+               /* let style = MonoTextStyleBuilder::new()
                     .font(&embedded_graphics::mono_font::iso_8859_16::FONT_9X18)
                     .text_color(TwoBitColor::Black)
                     .background_color(TwoBitColor::White)
@@ -194,8 +195,18 @@ impl Page for  MainPage{
                     .stroke_width(2).build();
                 let y =(self.choose_index + 1) * 20  ;
                 let line = Line::new(Point::new(0, y as i32), Point::new(100, y as i32));
-                line.into_styled(line_style).draw(display);
+                line.into_styled(line_style).draw(display);*/
 
+                let mut list_widget = ListWidget::new(Point::new(0,0)
+                                                  ,TwoBitColor::Black
+                                                  ,TwoBitColor::White
+                                                  ,display.bounding_box().size
+                                                  ,"主菜单"
+                        ,vec!["菜单项1","菜单项2","菜单项3"]
+
+                );
+                list_widget.choose(self.choose_index as usize);
+                list_widget.draw(display);
                 RENDER_CHANNEL.send(RenderInfo { time: 0 }).await;
                 println!("has display:{}", self.choose_index);
 

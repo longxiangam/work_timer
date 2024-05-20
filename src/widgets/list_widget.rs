@@ -12,11 +12,12 @@ use lcd_drivers::color::TwoBitColor;
 use u8g2_fonts::{FontRenderer, U8g2TextStyle};
 use u8g2_fonts::fonts;
 use u8g2_fonts::types::{FontColor, HorizontalAlignment, VerticalPosition};
+use crate::widgets::scroll_bar::{ScrollBar, ScrollBarDirection};
 
 const ITEM_HEIGHT:u32 = 20;
+const SCROLL_WIDTH:u32 = 10;
 //每个widget 包含状态与绘制，widget 没有业务逻辑只有通过对应事件回调触发
 pub struct ListWidget<C>{
-    title:&'static str,
     position:Point,
     offset_position:Point,
     size:Size,
@@ -28,16 +29,15 @@ pub struct ListWidget<C>{
 
 
 impl <C: Clone> ListWidget<C>{
-    pub fn new(position: Point,front_color:C,back_color:C,size: Size,title:&'static str,items:Vec<&'static str>) ->Self{
+    pub fn new(position: Point,front_color:C,back_color:C,size: Size,items:Vec<&'static str>) ->Self{
         let mut list_items = vec![];
-        let item_size = Size::new(size.width,ITEM_HEIGHT);
+        let item_size = Size::new(size.width - SCROLL_WIDTH,ITEM_HEIGHT);
         for (index,item) in items.iter().enumerate() {
             let item_position =  Point::new(position.x,position.y + (index) as i32 * ITEM_HEIGHT as i32 );
             let list_item = ListItemWidget::new(item_position,front_color.clone(),back_color.clone(),item_size,item);
             list_items.push(list_item);
         }
         Self{
-            title,
             position ,
             offset_position:position ,
             size,
@@ -93,7 +93,7 @@ impl <C: Clone> ListWidget<C>{
         if item_y > self.size.height / 2 {
 
             //偏移大于最后一个项能显示的高度时，直接用最后一项能显示的偏移
-            if item_y > last_item_can_show_y {
+            if item_y > last_item_can_show_y + self.size.height /2 {
                 return self.position - Point::new(0, last_item_can_show_y as i32);
             }
 
@@ -133,6 +133,16 @@ impl <C> Drawable for  ListWidget<C> where C:PixelColor{
         for item in self.items.iter() {
             item.draw(target);
         }
+
+        let position = Point::new( self.position.x + (self.size.width - SCROLL_WIDTH ) as i32,self.position.y);
+        let scroll_bar = ScrollBar::new(position, self.size.height
+                                        , SCROLL_WIDTH, 6, self.size.height
+                                        , self.content_height()
+                                        , self.offset_position.y
+                                        , ScrollBarDirection::Vertical
+                ,self.front_color,self.back_color
+        );
+        scroll_bar.draw(target);
 
         Ok(())
     }

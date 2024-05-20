@@ -207,9 +207,7 @@ impl Page for  MainPage{
                                                   ,TwoBitColor::Black
                                                   ,TwoBitColor::White
                                                   ,display.bounding_box().size
-                                                  ,"主菜单"
                         ,vec!["菜单项1","菜单项2","菜单项3","菜单项4","菜单项5","菜单项1","菜单项2","菜单项3","菜单项4","菜单项5"]
-
                 );
                 list_widget.choose(self.choose_index as usize);
                 list_widget.draw(display);

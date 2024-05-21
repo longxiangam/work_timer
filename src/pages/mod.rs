@@ -27,6 +27,21 @@ pub trait Page {
    /* fn run(&mut self)-> impl Future<Output=()> +Send +Sync;*/
     async fn  run(&mut self,spawner: Spawner);
 
+    fn mut_by_ptr<'a,T>(ptr:Option<usize>)->Option<&'a mut T>{
+        unsafe {
+            if let Some(v) =  ptr {
+                return Some(&mut *(v as *mut T));
+            }else{
+                return None;
+            }
+        }
+    }
+
+    fn mut_to_ptr<T>(ref_mut:&mut T)->usize{
+        unsafe {
+            ref_mut as *mut T as usize
+        }
+    }
 }
 
 

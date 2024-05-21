@@ -89,7 +89,6 @@ impl <C> Drawable for ScrollBar<C> where C:PixelColor{
             .draw(target);
 
         let rectangle = self.bar_rectangle();
-        println!("rectangle:{:#?}",rectangle);
         let rectangle_inner = rectangle
             .into_styled(fill_style)
             .draw(target);

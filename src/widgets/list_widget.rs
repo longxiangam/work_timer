@@ -194,6 +194,7 @@ impl <C> Drawable for  ListItemWidget<C>  where C:PixelColor{
             let line_style = PrimitiveStyleBuilder::new()
                 .stroke_color(self.front_color)
                 .stroke_alignment(StrokeAlignment::Inside)
+                .fill_color(self.front_color)
                 .stroke_width(1).build();
             let rectangle = Rectangle::new(self.position,self.size)
                 .into_styled(line_style)
@@ -201,7 +202,6 @@ impl <C> Drawable for  ListItemWidget<C>  where C:PixelColor{
 
         }
 
-        println!("绘制项");
        /* let mut style =
             U8g2TextStyle::new(fonts::u8g2_font_wqy12_t_gb2312b, self.front_color);
         Text::new(self.label, self.position, style )
@@ -219,7 +219,7 @@ impl <C> Drawable for  ListItemWidget<C>  where C:PixelColor{
             self.position+Point::new(10,5),
             VerticalPosition::Top,
             HorizontalAlignment::Left,
-            FontColor::Transparent(self.front_color),
+            FontColor::Transparent(if self.is_choose { self.back_color}else {self.front_color}),
             target,
         );
         //style.set_background_color(Some(self.back_color));

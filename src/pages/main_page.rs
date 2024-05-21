@@ -77,48 +77,55 @@ impl MainPage {
     }
     async fn bind_event(){
         event::clear().await;
-        event::on(EventType::KeyShort(1),  move ||  {
+        event::on(EventType::KeyShort(1),  move |ptr|  {
             println!("current_page:" );
             return Box::pin(async {
                 Self::get_mut().await.unwrap().increase();
                 println!("current_page:{}",Self::get_mut().await.unwrap().choose_index );
             });
         }).await;
-        event::on(EventType::KeyLongStart(1),  ||  {
+        event::on(EventType::KeyLongStart(1),  |ptr|  {
             println!("current_page:" );
             return Box::pin( async {
                 INCREASE_CHANNEL.send(true).await;
             });
         }).await;
 
-        event::on(EventType::KeyLongEnd(1),  ||  {
+        event::on(EventType::KeyLongEnd(1),  |ptr|  {
             println!("current_page:" );
             return Box::pin( async {
                 INCREASE_CHANNEL.send(false).await;
             });
         }).await;
-        event::on(EventType::KeyLongStart(2),  ||  {
+        event::on(EventType::KeyLongStart(2),  |ptr|  {
             println!("current_page:" );
             return Box::pin( async {
                 DECREASE_CHANNEL.send(true).await;
             });
         }).await;
 
-        event::on(EventType::KeyLongEnd(2),  ||  {
+        event::on(EventType::KeyLongEnd(2),  |ptr|  {
             println!("current_page:" );
             return Box::pin( async {
                 DECREASE_CHANNEL.send(false).await;
             });
         }).await;
-        event::on(EventType::KeyShort(2),  ||  {
+        event::on(EventType::KeyShort(2),  |ptr|  {
             println!("current_page:" );
             return Box::pin( async {
                 Self::get_mut().await.unwrap().decrease();
                 println!("current_page:{}",Self::get_mut().await.unwrap().choose_index );
             });
         }).await;
-
-        event::on(EventType::WheelFront,  ||  {
+        event::on(EventType::KeyShort(5),  |ptr|  {
+            println!("current_page:" );
+            return Box::pin( async {
+                let mut_ref = Self::get_mut().await.unwrap();
+                mut_ref.current_page = mut_ref.choose_index;
+                println!("current_page:{}",Self::get_mut().await.unwrap().choose_index );
+            });
+        }).await;
+        event::on(EventType::WheelFront,  |ptr|  {
             println!("current_page:" );
             return Box::pin( async {
                 Self::get_mut().await.unwrap().increase();
@@ -126,7 +133,7 @@ impl MainPage {
             });
         }).await;
 
-        event::on(EventType::WheelBack,  ||  {
+        event::on(EventType::WheelBack,  |ptr|  {
             println!("current_page:" );
             return Box::pin( async {
                 Self::get_mut().await.unwrap().decrease();
@@ -211,8 +218,10 @@ impl Page for  MainPage{
                 //监听事件
                 self.render().await;
             } else if self.current_page == 1 {
-                CountDownPage::init(spawner).await;
-                CountDownPage::get_mut().await.unwrap().run(spawner).await;
+
+                let mut countDownPage = CountDownPage::new();
+                countDownPage.bind_event().await;
+                countDownPage.run(spawner).await;
 
                 //切换到主页并绑定事件
                 self.back().await;

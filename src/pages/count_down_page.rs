@@ -7,6 +7,7 @@ use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Instant, Timer};
+use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::Drawable;
 use embedded_graphics::geometry::Point;
 use embedded_graphics::mono_font::MonoTextStyleBuilder;
@@ -26,37 +27,35 @@ use crate::event::EventType;
 use crate::pages::{ Page};
 use crate::pages::main_page::MainPage;
 
-
-static COUNT_DOWN_PAGE:Mutex<CriticalSectionRawMutex,RefCell<Option<CountDownPage>> > = Mutex::new(RefCell::new(None));
-
 pub struct  CountDownPage{
     begin_count:u32,
     current_count:u32,
     need_render:bool,
     choose_index:u32,
+    running:bool,
 }
 
 impl CountDownPage {
-    pub async fn init(spawner: Spawner) {
-        COUNT_DOWN_PAGE.lock().await.get_mut().replace(CountDownPage::new());
-        Self::bind_event().await;
-    }
-    pub async fn close(){
-        event::clear().await;
-        COUNT_DOWN_PAGE.lock().await.replace(None);
-    }
 
-    pub async fn get_mut() -> Option<&'static mut Self> {
-        unsafe {
-            // 一个 u64 值，假设它是一个有效的指针地址
-
-            // 将 u64 转换为指针类型
-            let ptr: *mut CountDownPage = COUNT_DOWN_PAGE.lock().await.borrow_mut().as_mut().unwrap() as *mut CountDownPage;
-            return Some(&mut *ptr);
-        }
-    }
-    async fn bind_event() {
+    pub async fn bind_event(&mut self) {
         event::clear().await;
+
+        event::on_target(EventType::KeyShort(1),Self::mut_to_ptr(self),  move |ptr|  {
+            println!("current_page:" );
+            return Box::pin(async move {
+                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                mut_ref.increase();
+                println!("count_down_page:{}",mut_ref.choose_index );
+            });
+        }).await;
+        event::on_target(EventType::KeyShort(5),Self::mut_to_ptr(self),  move |ptr|  {
+            println!("current_page:" );
+            return Box::pin(async move {
+                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                mut_ref.back();
+                println!("count_down_page:{}",mut_ref.choose_index );
+            });
+        }).await;
     }
     fn increase(&mut self) {
         if self.choose_index < 500 {
@@ -71,6 +70,9 @@ impl CountDownPage {
             self.need_render = true;
         }
     }
+    fn back(&mut self){
+        self.running = false;
+    }
 }
 
 impl Page for CountDownPage{
@@ -79,6 +81,7 @@ impl Page for CountDownPage{
             begin_count:0,
             current_count:0,
             need_render:true,
+            running:true,
             choose_index: 0,
         }
     }
@@ -87,7 +90,7 @@ impl Page for CountDownPage{
         if self.need_render {
             self.need_render = false;
             if let Some(display) = display_mut() {
-
+                display.clear(TwoBitColor::White);
                 let style = MonoTextStyleBuilder::new()
                     .font(&embedded_graphics::mono_font::iso_8859_16::FONT_9X18)
                     .text_color(TwoBitColor::Black)
@@ -123,7 +126,12 @@ impl Page for CountDownPage{
 
     async fn run(&mut self,spawner: Spawner) {
         let mut last_secs = Instant::now().as_secs();
+        self.running = true;
         loop {
+
+            if !self.running {
+                break;
+            }
 
             //监听事件
             println!("main_pages");
@@ -145,7 +153,7 @@ impl Page for CountDownPage{
 
 static INCREASE_CHANNEL:Channel<CriticalSectionRawMutex,bool, 2> = Channel::new();
 static DECREASE_CHANNEL:Channel<CriticalSectionRawMutex,bool, 2> = Channel::new();
-#[embassy_executor::task]
+/*#[embassy_executor::task]
 async fn increase(){
     loop {
         INCREASE_CHANNEL.receive().await;
@@ -185,4 +193,4 @@ async fn decrease(){
         Timer::after(Duration::from_millis(100)).await;
     }
 }
-
+*/

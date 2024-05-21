@@ -1,6 +1,7 @@
 use alloc::boxed::Box;
 use alloc::vec;
 use alloc::vec::Vec;
+use core::cell::RefCell;
 use core::convert::Infallible;
 use core::future::Future;
 use core::ops::Deref;
@@ -34,16 +35,30 @@ pub struct EventInfo{
 
 
 
+///ptr 为处理对象的裸指针，因为定义的一个全局vec保存listener ，泛型不好处理，这里直接用usize
+///所以要在对象drop 的同时clear 掉事件监听，不然会出现悬垂指针的问题
 struct Listener{
-    callback:Box< dyn FnMut() -> (Pin<Box< dyn Future<Output = ()> + Send + Sync + 'static>>)  + Send + Sync + 'static>,
-    event_type:EventType
+    callback:Box< dyn FnMut(Option<usize>) -> (Pin<Box< dyn Future<Output = ()> + Send + Sync + 'static>>)  + Send + Sync + 'static>,
+    event_type:EventType,
+    ptr:Option<usize>, //对象的裸指针，因为定义的一个全局vec保存listener ，泛型不好处理，这里直接用usize
+    fixed:bool,//是否常驻事件
 }
 
 static LISTENER:Mutex<CriticalSectionRawMutex,Vec<Listener>>  = Mutex::new(vec![]) ;
 pub async fn on<F>(event_type: EventType, callback: F)
-where F: FnMut() -> (Pin<Box<dyn Future<Output=()> + Send + Sync + 'static>>) + Send + Sync + 'static,
+where F: FnMut(Option<usize>) -> (Pin<Box<dyn Future<Output=()> + Send + Sync + 'static>>) + Send + Sync + 'static,
 {
-    LISTENER.lock().await.push(Listener{callback:Box::new(callback),event_type});
+    LISTENER.lock().await.push(Listener{callback:Box::new(callback),event_type,ptr:None,fixed:false});
+}
+pub async fn on_target<F>(event_type: EventType,target_ptr:usize, callback: F)
+    where F: FnMut(Option<usize>) -> (Pin<Box<dyn Future<Output=()> + Send + Sync + 'static>>) + Send + Sync + 'static
+{
+    LISTENER.lock().await.push(Listener{callback:Box::new(callback),event_type,ptr:Some(target_ptr),fixed:false});
+}
+pub async fn on_fixed<F>(event_type: EventType,target_ptr:usize, callback: F)
+    where F: FnMut(Option<usize>) -> (Pin<Box<dyn Future<Output=()> + Send + Sync + 'static>>) + Send + Sync + 'static
+{
+    LISTENER.lock().await.push(Listener{callback:Box::new(callback),event_type,ptr:Some(target_ptr),fixed:true});
 }
 
 pub async fn un(event_type: EventType)
@@ -80,7 +95,9 @@ pub async fn toggle_event(event_type: EventType,ms:u64){
            /* let callback = listener.callback.as_ref().clone();
 
             callback.deref().await;*/
-            (listener.callback)().await;
+
+                (listener.callback)(listener.ptr).await;
+
         }
     }
 
@@ -115,7 +132,7 @@ pub async  fn run(mut key1:Gpio11<Input<PullUp>>,mut key2:Gpio5<Input<PullUp>>,
     }
 }
 
-async fn key_detection<P,const Num:usize>(key: &mut P)
+pub async fn key_detection<P,const Num:usize>(key: &mut P)
 where P:InputPin
 {
     let begin_ms = Instant::now().as_millis();

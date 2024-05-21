@@ -1,12 +1,12 @@
 use core::convert::Infallible;
-use embassy_futures::select::select;
+use embassy_futures::select::{Either, select};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_time::{Delay, Duration, Instant, Timer};
 use embedded_hal::delay::DelayNs;
 
 use embedded_hal_async::digital::Wait;
 use esp_println::{print, println};
-use hal::gpio::{AnyPin, Gpio0, Gpio1, Input, InputPin, PullUp};
+use hal::gpio::{AnyPin, Gpio0, Gpio1, Gpio13, Input, InputPin, PullUp};
 use hal::prelude::_embedded_hal_digital_v2_InputPin;
 use embassy_sync::channel::{Channel, Receiver, Sender};
 
@@ -15,7 +15,7 @@ use esp_wifi::wifi::is_from_isr;
 use crate::display;
 use crate::display::{display_mut, RenderInfo};
 use crate::ec11::WheelDirection::{BACK, FRONT, NO_STATE};
-use crate::event::{EventType, toggle_event};
+use crate::event::{EventType, key_detection, toggle_event};
 
 #[derive(Eq, PartialEq)]
 enum WheelDirection{
@@ -27,70 +27,80 @@ const SAMPLE_TIMES:u32 = 10;
 const JUDGE_TIMES:u32 = 8;
 
 #[embassy_executor::task]
-pub async fn task(mut a_point :Gpio1<Input<PullUp>>,mut b_point :Gpio0<Input<PullUp>>){
+pub async fn task(mut a_point :Gpio1<Input<PullUp>>,mut b_point :Gpio0<Input<PullUp>>,mut push_key:Gpio13<Input<PullUp>>){
     // 初始化编码器状态
 
     let mut begin_state = WheelDirection::NO_STATE;
     let mainPageSender =  crate::pages::main_page::MAIN_PAGE_CHANNEL.sender();
 
-
     // 开始监听编码器状态变化
-
     loop {
 
-        a_point.wait_for_any_edge().await;
+        let a_edge =  a_point.wait_for_any_edge();
+        let key_edge =push_key.wait_for_falling_edge();
 
-        let mut a_is_low_times = 0;
-        let mut b_is_low_times = 0;
-        for i in 0..SAMPLE_TIMES {
-            if a_point.is_low().unwrap() {
-                a_is_low_times += 1;
-            }
-            if b_point.is_low().unwrap() {
-                b_is_low_times += 1;
-            }
-        }
+        match  select(a_edge,key_edge).await {
+            Either::First(_) => {
 
-        let mut a_is_down = false;
-        let mut b_is_down = false;
-        if(a_is_low_times > JUDGE_TIMES){
-            a_is_down = true;
-        }else if a_is_low_times < SAMPLE_TIMES - JUDGE_TIMES {
-            a_is_down = false;
-        }else {
-            continue;
-        }
-        if b_is_low_times > JUDGE_TIMES {
-            b_is_down = true;
-        }else if b_is_low_times < SAMPLE_TIMES - JUDGE_TIMES {
-            b_is_down = false;
-        }else {
-            continue;
-        }
-        //下降沿开始
-        if(a_is_down){
-            if(b_is_down){
-                begin_state = FRONT;
-                continue;
-            }else if(!b_is_down){
-                begin_state =  BACK;
-                continue;
-            }
-            begin_state = NO_STATE;
-
-        }else{
-            //上升沿判断结束
-            if(!b_is_down){
-                if begin_state == FRONT  {
-                    toggle_event(EventType::WheelFront,Instant::now().as_millis()).await;
+                let mut a_is_low_times = 0;
+                let mut b_is_low_times = 0;
+                for i in 0..SAMPLE_TIMES {
+                    if a_point.is_low().unwrap() {
+                        a_is_low_times += 1;
+                    }
+                    if b_point.is_low().unwrap() {
+                        b_is_low_times += 1;
+                    }
                 }
-            }else if(b_is_down){
-                if begin_state == BACK {
-                    toggle_event(EventType::WheelBack,Instant::now().as_millis()).await;
+
+                let mut a_is_down = false;
+                let mut b_is_down = false;
+                if(a_is_low_times > JUDGE_TIMES){
+                    a_is_down = true;
+                }else if a_is_low_times < SAMPLE_TIMES - JUDGE_TIMES {
+                    a_is_down = false;
+                }else {
+                    continue;
                 }
+                if b_is_low_times > JUDGE_TIMES {
+                    b_is_down = true;
+                }else if b_is_low_times < SAMPLE_TIMES - JUDGE_TIMES {
+                    b_is_down = false;
+                }else {
+                    continue;
+                }
+                //下降沿开始
+                if(a_is_down){
+                    if(b_is_down){
+                        begin_state = FRONT;
+                        continue;
+                    }else if(!b_is_down){
+                        begin_state =  BACK;
+                        continue;
+                    }
+                    begin_state = NO_STATE;
+
+                }else{
+                    //上升沿判断结束
+                    if(!b_is_down){
+                        if begin_state == FRONT  {
+                            toggle_event(EventType::WheelFront,Instant::now().as_millis()).await;
+                        }
+                    }else if(b_is_down){
+                        if begin_state == BACK {
+                            toggle_event(EventType::WheelBack,Instant::now().as_millis()).await;
+                        }
+                    }
+                    begin_state = NO_STATE;
+                }
+
+
             }
-            begin_state = NO_STATE;
+            Either::Second(_) => {
+                key_detection::<_,5>(&mut push_key).await;
+            }
         }
+
     }
 }
 

@@ -33,6 +33,7 @@ use crate::display::{display_mut, draw_text_2, RENDER_CHANNEL, RenderInfo};
 use crate::event::EventType;
 use crate::pages::count_down_page::{ CountDownPage};
 use crate::pages::{ Page};
+use crate::pages::games_page::GamesPage;
 use crate::widgets::list_widget::ListWidget;
 
 static MAIN_PAGE:Mutex<CriticalSectionRawMutex,RefCell<Option<MainPage>> > = Mutex::new(RefCell::new(None));
@@ -63,7 +64,7 @@ impl MainPage {
         MAIN_PAGE.lock().await.get_mut().replace(MainPage::new());
         spawner.spawn(increase()).ok();
         spawner.spawn(decrease()).ok();
-        Self::bind_event().await;
+        Self::bind_event(MAIN_PAGE.lock().await.get_mut().as_mut().unwrap()).await;
     }
 
     pub async fn get_mut() -> Option<&'static mut MainPage> {
@@ -75,7 +76,49 @@ impl MainPage {
             return Some(&mut *ptr);
         }
     }
-    async fn bind_event(){
+
+
+    fn increase(&mut self){
+        if self.choose_index < self.menus.as_mut().unwrap().len() as u32 {
+            self.choose_index += 1;
+            self.need_render = true;
+        }
+    }
+
+    fn decrease(&mut self){
+        if self.choose_index > 0 {
+            self.choose_index -= 1;
+            self.need_render = true;
+        }
+    }
+
+    async fn back(&mut self){
+        self.current_page = 0;
+        self.need_render = true;
+        Self::bind_event(self).await;
+    }
+}
+impl Page for  MainPage{
+
+    fn new()->Self{
+
+
+        let mut menus = vec![];
+        for i in 0..20 {
+            menus.push(MenuItem{
+                title:format!("菜单项{}",i),
+                key:i.to_string()
+            });
+        }
+        Self{
+            current_page:0,
+            choose_index:0,
+            is_long_start:false,
+            need_render:true,
+            menus:Some(menus)
+        }
+    }
+    async fn bind_event(&mut self){
         event::clear().await;
         event::on(EventType::KeyShort(1),  move |ptr|  {
             println!("current_page:" );
@@ -143,46 +186,7 @@ impl MainPage {
     }
 
 
-    fn increase(&mut self){
-        if self.choose_index < self.menus.as_mut().unwrap().len() as u32 {
-            self.choose_index += 1;
-            self.need_render = true;
-        }
-    }
 
-    fn decrease(&mut self){
-        if self.choose_index > 0 {
-            self.choose_index -= 1;
-            self.need_render = true;
-        }
-    }
-
-    async fn back(&mut self){
-        self.current_page = 0;
-        self.need_render = true;
-        Self::bind_event().await;
-    }
-}
-impl Page for  MainPage{
-
-    fn new()->Self{
-
-
-        let mut menus = vec![];
-        for i in 0..20 {
-            menus.push(MenuItem{
-                title:format!("菜单项{}",i),
-                key:i.to_string()
-            });
-        }
-        Self{
-            current_page:0,
-            choose_index:0,
-            is_long_start:false,
-            need_render:true,
-            menus:Some(menus)
-        }
-    }
     //通过具体的状态绘制
     async fn render(&mut self) {
         if self.need_render {
@@ -222,6 +226,13 @@ impl Page for  MainPage{
                 let mut countDownPage = CountDownPage::new();
                 countDownPage.bind_event().await;
                 countDownPage.run(spawner).await;
+
+                //切换到主页并绑定事件
+                self.back().await;
+            }else if self.current_page == 2 {
+                let mut gamesPage = GamesPage::new();
+                gamesPage.bind_event().await;
+                gamesPage.run(spawner).await;
 
                 //切换到主页并绑定事件
                 self.back().await;

@@ -37,26 +37,7 @@ pub struct  CountDownPage{
 
 impl CountDownPage {
 
-    pub async fn bind_event(&mut self) {
-        event::clear().await;
 
-        event::on_target(EventType::KeyShort(1),Self::mut_to_ptr(self),  move |ptr|  {
-            println!("current_page:" );
-            return Box::pin(async move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
-                mut_ref.increase();
-                println!("count_down_page:{}",mut_ref.choose_index );
-            });
-        }).await;
-        event::on_target(EventType::KeyShort(5),Self::mut_to_ptr(self),  move |ptr|  {
-            println!("current_page:" );
-            return Box::pin(async move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
-                mut_ref.back();
-                println!("count_down_page:{}",mut_ref.choose_index );
-            });
-        }).await;
-    }
     fn increase(&mut self) {
         if self.choose_index < 500 {
             self.choose_index += 1;
@@ -84,6 +65,26 @@ impl Page for CountDownPage{
             running:true,
             choose_index: 0,
         }
+    }
+    async fn bind_event(&mut self) {
+        event::clear().await;
+
+        event::on_target(EventType::KeyShort(1),Self::mut_to_ptr(self),  move |ptr|  {
+            println!("current_page:" );
+            return Box::pin(async move {
+                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                mut_ref.increase();
+                println!("count_down_page:{}",mut_ref.choose_index );
+            });
+        }).await;
+        event::on_target(EventType::KeyShort(5),Self::mut_to_ptr(self),  move |ptr|  {
+            println!("current_page:" );
+            return Box::pin(async move {
+                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                mut_ref.back();
+                println!("count_down_page:{}",mut_ref.choose_index );
+            });
+        }).await;
     }
 
     async fn render(&mut self)  {

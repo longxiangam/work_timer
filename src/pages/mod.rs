@@ -11,6 +11,7 @@ use crate::pages::main_page::MainPage;
 
 pub mod main_page;
 mod count_down_page;
+mod games_page;
 
 
 enum PageEnum {
@@ -26,6 +27,7 @@ pub trait Page {
     fn render(&mut self) -> impl Future<Output=()> +Send +Sync;
    /* fn run(&mut self)-> impl Future<Output=()> +Send +Sync;*/
     async fn  run(&mut self,spawner: Spawner);
+    async fn bind_event(&mut self);
 
     fn mut_by_ptr<'a,T>(ptr:Option<usize>)->Option<&'a mut T>{
         unsafe {

@@ -52,18 +52,31 @@ pub async  fn render(mut spi:  SpiDma<'static,SPI2, Channel0, hal::spi::FullDupl
         DISPLAY.replace(display);
     }
 
-
+    const PAGE_SIZE: usize = 240;  // 每页的长度
     loop {
         println!("wait render refresh");
 
         let renderInfo = receiver.receive().await;
 
         println!("render refresh:{}",renderInfo.time);
-
+        let buffer = unsafe { DISPLAY.as_mut().unwrap().buffer() };
+        let len = buffer.len();
         lcd.goto(&mut spi_device,0,0).await;
-        unsafe {
-            lcd.put_char(&mut spi_device, DISPLAY.as_mut().unwrap().buffer()).await;
-        }
+        let mut current_page = 0;
+
+        lcd.put_char(&mut spi_device, &buffer).await;
+        //分页写入
+        /*while current_page * PAGE_SIZE < len {
+            let start = current_page * PAGE_SIZE;
+            let end = usize::min(start + PAGE_SIZE, len);  // 确保不会超出数组长度
+
+            // 传递当前页的数据
+            lcd.put_char(&mut spi_device, &buffer[start..end]).await;
+            // 如果需要延迟，可以在这里添加
+            Timer::after(Duration::from_millis(1)).await;
+
+            current_page += 1;
+        }*/
 
         Timer::after(Duration::from_millis(50)).await;
     }

@@ -41,6 +41,10 @@ impl CountDownPage {
         COUNT_DOWN_PAGE.lock().await.get_mut().replace(CountDownPage::new());
         Self::bind_event().await;
     }
+    pub async fn close(){
+        event::clear().await;
+        COUNT_DOWN_PAGE.lock().await.replace(None);
+    }
 
     pub async fn get_mut() -> Option<&'static mut Self> {
         unsafe {

@@ -1,6 +1,8 @@
 use alloc::{format, vec};
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::marker::PhantomData;
+use core::ops::Add;
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::Drawable;
 use embedded_graphics::prelude::{PixelColor, Point, Primitive, Size};
@@ -29,12 +31,12 @@ pub struct ListWidget<C>{
 
 
 impl <C: Clone> ListWidget<C>{
-    pub fn new(position: Point,front_color:C,back_color:C,size: Size,items:Vec<&'static str>) ->Self{
+    pub fn new(position: Point,front_color:C,back_color:C,size: Size,items:Vec<&str>) ->Self{
         let mut list_items = vec![];
         let item_size = Size::new(size.width - SCROLL_WIDTH,ITEM_HEIGHT);
         for (index,item) in items.iter().enumerate() {
             let item_position =  Point::new(position.x,position.y + (index) as i32 * ITEM_HEIGHT as i32 );
-            let list_item = ListItemWidget::new(item_position,front_color.clone(),back_color.clone(),item_size,item);
+            let list_item = ListItemWidget::new(item_position,front_color.clone(),back_color.clone(),item_size,String::with_capacity(20).add(item));
             list_items.push(list_item);
         }
         Self{
@@ -150,7 +152,7 @@ impl <C> Drawable for  ListWidget<C> where C:PixelColor{
 
 
 pub struct ListItemWidget<C>{
-    label:&'static str,
+    label:String,
     position:Point,
     size:Size,
     front_color:C,
@@ -160,7 +162,7 @@ pub struct ListItemWidget<C>{
 }
 
 impl <C: Clone>ListItemWidget<C>{
-    fn new(position: Point,front_color:C,back_color:C,size: Size,label:&'static str) ->Self{
+    fn new(position: Point,front_color:C,back_color:C,size: Size,label:String) ->Self{
 
         Self{
             label,

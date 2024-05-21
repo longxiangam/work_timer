@@ -1,5 +1,8 @@
 use alloc::boxed::Box;
 use alloc::{format, vec};
+use alloc::fmt::format;
+use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 use core::cell::RefCell;
 use core::convert::Infallible;
 use embassy_executor::Spawner;
@@ -39,6 +42,11 @@ pub struct MainPageInfo{
     pub count:i32
 }
 
+struct  MenuItem{
+    key:String,
+    title:String,
+}
+
 ///每个page 包含状态与绘制与逻辑处理
 ///状态通过事件改变，并触发绘制
 pub struct MainPage{
@@ -46,6 +54,7 @@ pub struct MainPage{
     choose_index:u32,
     is_long_start:bool,
     need_render:bool,
+    menus:Option<Vec<MenuItem>>
 }
 
 impl MainPage {
@@ -128,7 +137,7 @@ impl MainPage {
 
 
     fn increase(&mut self){
-        if self.choose_index < 9 {
+        if self.choose_index < self.menus.as_mut().unwrap().len() as u32 {
             self.choose_index += 1;
             self.need_render = true;
         }
@@ -150,11 +159,21 @@ impl MainPage {
 impl Page for  MainPage{
 
     fn new()->Self{
+
+
+        let mut menus = vec![];
+        for i in 0..20 {
+            menus.push(MenuItem{
+                title:format!("菜单项{}",i),
+                key:i.to_string()
+            });
+        }
         Self{
             current_page:0,
             choose_index:0,
             is_long_start:false,
             need_render:true,
+            menus:Some(menus)
         }
     }
     //通过具体的状态绘制
@@ -163,56 +182,20 @@ impl Page for  MainPage{
             self.need_render = false;
             if let Some(display) = display_mut() {
                 display.clear(TwoBitColor::White);
-             /*   display_mut().unwrap().fill_solid(&Rectangle::new(Point::new(10, 50), Size::new(100, 40)), TwoBitColor::White);
-                draw_text_2(display_mut().unwrap(), format!("render:{}", self.choose_index).as_str(), 10, 50, TwoBitColor::Black);*/
-               /* let style = MonoTextStyleBuilder::new()
-                    .font(&embedded_graphics::mono_font::iso_8859_16::FONT_9X18)
-                    .text_color(TwoBitColor::Black)
-                    .background_color(TwoBitColor::White)
-                    .build();
-
-                let style =
-                    U8g2TextStyle::new(fonts::u8g2_font_wqy12_t_gb2312b, TwoBitColor::Black);
+                let menus:Vec<&str> = self.menus.as_ref().unwrap().iter().map(|v|{ v.title.as_str() }).collect();
 
 
-                let display_area = display.bounding_box();
-                let row = LinearLayout::horizontal(
-                    Chain::new(Text::new("倒计时", Point::zero(), style.clone())))
-                    .with_alignment(vertical::Center)
-                    .arrange();
-                let row_2 = LinearLayout::horizontal(
-                    Chain::new(Text::new("正计时", Point::zero(), style.clone())))
-                    .with_alignment(vertical::Center)
-                    .arrange();
-                let row_3 = LinearLayout::horizontal(
-                    Chain::new(Text::new("日历", Point::zero(), style.clone())))
-                    .with_alignment(vertical::Center)
-                    .arrange();
-                LinearLayout::vertical(Chain::new(row).append(row_2).append(row_3))
-                    .with_alignment(horizontal::Left)
-                    .with_spacing(FixedMargin(4))
-                    .arrange()
-                    .align_to(&display_area, horizontal::Left, vertical::Top)
-                    .draw(display);
-
-                let line_style = PrimitiveStyleBuilder::new()
-                    .stroke_color(TwoBitColor::Black)
-                    .stroke_alignment(StrokeAlignment::Inside)
-                    .stroke_width(2).build();
-                let y =(self.choose_index + 1) * 20  ;
-                let line = Line::new(Point::new(0, y as i32), Point::new(100, y as i32));
-                line.into_styled(line_style).draw(display);*/
-
-                let mut list_widget = ListWidget::new(Point::new(0,0)
-                                                  ,TwoBitColor::Black
-                                                  ,TwoBitColor::White
-                                                  ,display.bounding_box().size
-                        ,vec!["菜单项1","菜单项2","菜单项3","菜单项4","菜单项5","菜单项1","菜单项2","菜单项3","菜单项4","菜单项5"]
+                let mut list_widget = ListWidget::new(Point::new(0, 0)
+                                                      , TwoBitColor::Black
+                                                      , TwoBitColor::White
+                                                      , display.bounding_box().size
+                                                      , menus
                 );
                 list_widget.choose(self.choose_index as usize);
                 list_widget.draw(display);
                 RENDER_CHANNEL.send(RenderInfo { time: 0 }).await;
                 println!("has display:{}", self.choose_index);
+
 
             } else {
                 println!("no display");
@@ -228,9 +211,9 @@ impl Page for  MainPage{
                 //监听事件
                 self.render().await;
             } else if self.current_page == 1 {
-                let mut count_down = CountDownPage::new();
                 CountDownPage::init(spawner).await;
-                count_down.run(spawner).await;
+                CountDownPage::get_mut().await.unwrap().run(spawner).await;
+
                 //切换到主页并绑定事件
                 self.back().await;
             }

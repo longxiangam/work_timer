@@ -31,3 +31,7 @@ embedded-hal-bus ={version = "0.1",features = ["async"]}
 embedded-alloc = { version = "0.5"}
 time = { version = "0.3", default-features = false , features = ["alloc","rand","macros","parsing","serde"]}
 log = "0.4.21"
+
+
+chip8={package = "hello-rust", path="../reference/wasm-rust-chip8"}
+wavv = { version = "0.1.4" }

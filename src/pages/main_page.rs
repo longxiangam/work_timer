@@ -190,8 +190,10 @@ impl Page for  MainPage{
     //通过具体的状态绘制
     async fn render(&mut self) {
         if self.need_render {
-            self.need_render = false;
+
             if let Some(display) = display_mut() {
+                self.need_render = false;
+
                 display.clear(TwoBitColor::White);
                 let menus:Vec<&str> = self.menus.as_ref().unwrap().iter().map(|v|{ v.title.as_str() }).collect();
 

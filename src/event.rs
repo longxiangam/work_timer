@@ -38,7 +38,7 @@ pub struct EventInfo{
 ///ptr 为处理对象的裸指针，因为定义的一个全局vec保存listener ，泛型不好处理，这里直接用usize
 ///所以要在对象drop 的同时clear 掉事件监听，不然会出现悬垂指针的问题
 struct Listener{
-    callback:Box< dyn FnMut(Option<usize>) -> (Pin<Box< dyn Future<Output = ()> + Send + Sync + 'static>>)  + Send + Sync + 'static>,
+    callback:Box< dyn FnMut(Option<usize>) -> (Pin<Box< dyn Future<Output = ()>  + 'static>>)  + Send + Sync + 'static>,
     event_type:EventType,
     ptr:Option<usize>, //对象的裸指针，因为定义的一个全局vec保存listener ，泛型不好处理，这里直接用usize
     fixed:bool,//是否常驻事件
@@ -46,17 +46,17 @@ struct Listener{
 
 static LISTENER:Mutex<CriticalSectionRawMutex,Vec<Listener>>  = Mutex::new(vec![]) ;
 pub async fn on<F>(event_type: EventType, callback: F)
-where F: FnMut(Option<usize>) -> (Pin<Box<dyn Future<Output=()> + Send + Sync + 'static>>) + Send + Sync + 'static,
+where F: FnMut(Option<usize>) -> (Pin<Box<dyn Future<Output=()>  + 'static>>) + Send + Sync + 'static,
 {
     LISTENER.lock().await.push(Listener{callback:Box::new(callback),event_type,ptr:None,fixed:false});
 }
 pub async fn on_target<F>(event_type: EventType,target_ptr:usize, callback: F)
-    where F: FnMut(Option<usize>) -> (Pin<Box<dyn Future<Output=()> + Send + Sync + 'static>>) + Send + Sync + 'static
+    where F: FnMut(Option<usize>) -> (Pin<Box<dyn Future<Output=()>  + 'static>>) + Send + Sync + 'static
 {
     LISTENER.lock().await.push(Listener{callback:Box::new(callback),event_type,ptr:Some(target_ptr),fixed:false});
 }
 pub async fn on_fixed<F>(event_type: EventType,target_ptr:usize, callback: F)
-    where F: FnMut(Option<usize>) -> (Pin<Box<dyn Future<Output=()> + Send + Sync + 'static>>) + Send + Sync + 'static
+    where F: FnMut(Option<usize>) -> (Pin<Box<dyn Future<Output=()> + 'static>>) + Send + Sync + 'static
 {
     LISTENER.lock().await.push(Listener{callback:Box::new(callback),event_type,ptr:Some(target_ptr),fixed:true});
 }

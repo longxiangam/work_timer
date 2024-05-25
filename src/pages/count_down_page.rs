@@ -26,6 +26,8 @@ use crate::event;
 use crate::event::EventType;
 use crate::pages::{ Page};
 use crate::pages::main_page::MainPage;
+use crate::request::{RequestClient, ResponseData};
+use crate::wifi::use_wifi;
 
 pub struct  CountDownPage{
     begin_count:u32,
@@ -54,6 +56,27 @@ impl CountDownPage {
     fn back(&mut self){
         self.running = false;
     }
+
+    async fn request(&mut self){
+        let stack = use_wifi().await;
+        if let Ok(v) = stack {
+            let mut request = RequestClient::new(v);
+            let result = request.send_request("").await;
+            match result {
+                Ok(response) => {
+                    println!("请求成功{}", core::str::from_utf8(& response.data[..response.length]).unwrap());
+                }
+                Err(e) => {
+                    println!("请求失败{:?}",e);
+                }
+            }
+
+            println!("get stack ok" );
+        }else{
+            println!("get stack err" );
+        }
+        println!("get stack" );
+    }
 }
 
 impl Page for CountDownPage{
@@ -69,6 +92,23 @@ impl Page for CountDownPage{
     async fn bind_event(&mut self) {
         event::clear().await;
 
+       /* let temp = move |aa| {
+            return Box::pin(async move {
+                let ptr = None;
+                let mut_ref: &mut Self = Self::mut_by_ptr(ptr.clone()).unwrap();
+                mut_ref.request().await;
+                println!("count_down_page:{}", mut_ref.choose_index);
+            });
+        };
+        event::on_target(EventType::KeyShort(2),Self::mut_to_ptr(self),  temp).await;*/
+        event::on_target(EventType::KeyShort(2),Self::mut_to_ptr(self),  move |ptr|  {
+            println!("current_page:" );
+            return Box::pin(async move {
+                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                mut_ref.request().await;
+                println!("count_down_page:{}",mut_ref.choose_index );
+            });
+        }).await;
         event::on_target(EventType::KeyShort(1),Self::mut_to_ptr(self),  move |ptr|  {
             println!("current_page:" );
             return Box::pin(async move {
@@ -133,9 +173,6 @@ impl Page for CountDownPage{
             if !self.running {
                 break;
             }
-
-            //监听事件
-            println!("main_pages");
 
             let current_secs = Instant::now().as_secs();
             if current_secs != last_secs {

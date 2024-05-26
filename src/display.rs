@@ -54,11 +54,10 @@ pub async  fn render(mut spi:  SpiDma<'static,SPI2, Channel0, hal::spi::FullDupl
 
     const PAGE_SIZE: usize = 240;  // 每页的长度
     loop {
-        println!("wait render refresh");
+
 
         let renderInfo = receiver.receive().await;
 
-        println!("render refresh:{}",renderInfo.time);
         let buffer = unsafe { DISPLAY.as_mut().unwrap().buffer() };
         let len = buffer.len();
         lcd.goto(&mut spi_device,0,0).await;

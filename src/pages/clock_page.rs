@@ -86,6 +86,8 @@ impl ClockPage {
 
             println!("get stack ok" );
         }else{
+            self.loading = false;
+            self.error = Some("请求失败".to_string());
             println!("get stack err" );
         }
         println!("get stack" );
@@ -204,26 +206,6 @@ impl Page for ClockPage {
                     }
 
                 }
-
-
-
-               /* let row = LinearLayout::horizontal(
-                    Chain::new(Text::new("时间:", Point::zero(), style.clone()))
-                        .append(Text::new("10", Point::zero(), style.clone()))
-                        .append(Text::new("分钟", Point::zero(), style.clone())),
-                )
-                    .with_alignment(vertical::Center)
-                    .arrange();
-                let _ = LinearLayout::vertical( Chain::new(row) )
-                    .with_alignment(horizontal::Left)
-                    .arrange()
-                    .align_to(&display_area, horizontal::Left, vertical::Top)
-                    .draw(display);
-
-                let _ = Text::new(" 时间:  时间: ", Point::new(0,50), style.clone()).draw(display);
-*/
-
-
 
                 RENDER_CHANNEL.send(RenderInfo { time: 0 }).await;
 

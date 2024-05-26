@@ -14,7 +14,7 @@ use hal::prelude::{_esp_hal_ledc_channel_ChannelHW, _esp_hal_ledc_channel_Channe
 use static_cell::{make_static, StaticCell};
 use wavv::{Samples, Wave};
 
-const bytes: &'static [u8] = include_bytes!("../files/sing8bit.wav");
+const BYTES: &'static [u8] = include_bytes!("../files/sing8bit.wav");
 pub enum  SoundType{
     Warn(u32),
     Music(u32),
@@ -68,7 +68,7 @@ impl <'a,GPIO: hal::gpio::OutputPin> PwmPlayer<'a,GPIO> {
     }
 
     pub async fn player(&mut self,sound_type: SoundType){
-        let wave = Wave::from_bytes(&bytes).unwrap();
+        let wave = Wave::from_bytes(&BYTES).unwrap();
 
         let sample_rate = wave.header.sample_rate;
         let bit_depth = wave.header.bit_depth;

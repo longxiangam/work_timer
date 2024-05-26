@@ -3,7 +3,7 @@ use embassy_net::tcp::{ConnectError, TcpSocket};
 use esp_println::println;
 use esp_wifi::wifi::{WifiDevice, WifiStaDevice};
 
-const BUFFER_SIZE:usize = 2048;
+const BUFFER_SIZE:usize = 4096;
 #[derive(Debug)]
 pub enum RequestError{
     TimeOut,

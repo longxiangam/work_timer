@@ -36,4 +36,6 @@ log = "0.4.21"
 chip8={package = "hello-rust", path="../reference/wasm-rust-chip8"}
 wavv = { version = "0.1.4" }
 
+#heapless = { version = "0.8",features = ["portable-atomic-critical-section"] }
 reqwless = { version = "0.11", default-features = false }
+sntpc = {version = "0.3",features = ["async"] , default-features = false}

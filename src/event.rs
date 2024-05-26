@@ -132,7 +132,7 @@ pub async  fn run(mut key1:Gpio11<Input<PullUp>>,mut key2:Gpio5<Input<PullUp>>,
     }
 }
 
-pub async fn key_detection<P,const Num:usize>(key: &mut P)
+pub async fn key_detection<P,const NUM:usize>(key: &mut P)
 where P:InputPin
 {
     let begin_ms = Instant::now().as_millis();
@@ -151,9 +151,9 @@ where P:InputPin
                 //长时间按下
                 if !is_long {
                     is_long = true;
-                    toggle_event(EventType::KeyLongStart(Num as u32), current).await;
+                    toggle_event(EventType::KeyLongStart(NUM as u32), current).await;
                 }else {
-                    toggle_event(EventType::KeyLongIng(Num as u32), current).await;
+                    toggle_event(EventType::KeyLongIng(NUM as u32), current).await;
                 }
             }
         } else if is_low_times < 2 {
@@ -161,7 +161,7 @@ where P:InputPin
             let current = Instant::now().as_millis();
             if is_long {
                 //长时间按下后释放
-                toggle_event(EventType::KeyLongEnd(Num as u32), current).await;
+                toggle_event(EventType::KeyLongEnd(NUM as u32), current).await;
                 return;
             } else {
                 //短时按下，等几ms 看是否有下一次按下，如有则是双击
@@ -169,7 +169,7 @@ where P:InputPin
                 loop {
                     let current = Instant::now().as_millis();
                     if current - begin_ms > 400 {
-                        toggle_event(EventType::KeyShort(Num as u32), current).await;
+                        toggle_event(EventType::KeyShort(NUM as u32), current).await;
                         return;
                     }
                     let mut is_low_times = 0;
@@ -181,7 +181,7 @@ where P:InputPin
 
                     //变低
                     if is_low_times > 8{
-                        toggle_event(EventType::KeyDouble(Num as u32), current).await;
+                        toggle_event(EventType::KeyDouble(NUM as u32), current).await;
                         return;
                     }
                 }

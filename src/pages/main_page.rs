@@ -194,7 +194,7 @@ impl Page for  MainPage{
             if let Some(display) = display_mut() {
                 self.need_render = false;
 
-                display.clear(TwoBitColor::White);
+                let _ = display.clear(TwoBitColor::White);
                 let menus:Vec<&str> = self.menus.as_ref().unwrap().iter().map(|v|{ v.title.as_str() }).collect();
 
 
@@ -205,7 +205,7 @@ impl Page for  MainPage{
                                                       , menus
                 );
                 list_widget.choose(self.choose_index as usize);
-                list_widget.draw(display);
+                let _ = list_widget.draw(display);
                 RENDER_CHANNEL.send(RenderInfo { time: 0 }).await;
                 println!("has display:{}", self.choose_index);
 
@@ -225,16 +225,16 @@ impl Page for  MainPage{
                 self.render().await;
             } else if self.current_page == 1 {
 
-                let mut countDownPage = CountDownPage::new();
-                countDownPage.bind_event().await;
-                countDownPage.run(spawner).await;
+                let mut count_down_page = CountDownPage::new();
+                count_down_page.bind_event().await;
+                count_down_page.run(spawner).await;
 
                 //切换到主页并绑定事件
                 self.back().await;
             }else if self.current_page == 2 {
-                let mut gamesPage = GamesPage::new();
-                gamesPage.bind_event().await;
-                gamesPage.run(spawner).await;
+                let mut games_page = GamesPage::new();
+                games_page.bind_event().await;
+                games_page.run(spawner).await;
 
                 //切换到主页并绑定事件
                 self.back().await;

@@ -33,7 +33,7 @@ impl Page for GamesPage{
     async  fn render(&mut self) {
         if let Some(display) = display_mut() {
             println!("chip8 render");
-            display.clear(TwoBitColor::White);
+            let _ =  display.clear(TwoBitColor::White);
             for (index_pixel, pixel) in self.chip8.get_display().iter().enumerate() {
                 let row: i32 = index_pixel as i32 / 64;
                 let col: i32 = index_pixel as i32 % 64;
@@ -41,11 +41,11 @@ impl Page for GamesPage{
 
                 if *pixel != 0 {
                     for ii in 0..9 {
-                        Pixel(Point::new(col * 3 + ii % 3, row * 3 + ii / 3), TwoBitColor::Black).draw(display);
+                        let _ =  Pixel(Point::new(col * 3 + ii % 3, row * 3 + ii / 3), TwoBitColor::Black).draw(display);
                     }
                 } else {
                     for ii in 0..9 {
-                        Pixel(Point::new(col * 3 + ii % 3, row * 3 + ii / 3), TwoBitColor::White).draw(display);
+                        let _ =  Pixel(Point::new(col * 3 + ii % 3, row * 3 + ii / 3), TwoBitColor::White).draw(display);
                     }
                 }
             }

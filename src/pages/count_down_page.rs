@@ -1,4 +1,6 @@
 use alloc::boxed::Box;
+use alloc::format;
+use alloc::string::{String, ToString};
 use core::cell::RefCell;
 use core::future::Future;
 use embassy_executor::Spawner;
@@ -35,6 +37,8 @@ pub struct  CountDownPage{
     need_render:bool,
     choose_index:u32,
     running:bool,
+    loading:bool,
+    error:Option<String>
 }
 
 impl CountDownPage {
@@ -58,15 +62,21 @@ impl CountDownPage {
     }
 
     async fn request(&mut self){
+        self.loading = true;
+        self.error = None;
         let stack = use_wifi().await;
         if let Ok(v) = stack {
             let mut request = RequestClient::new(v);
             let result = request.send_request("").await;
             match result {
                 Ok(response) => {
+                    self.loading = false;
+                    self.error = None;
                     println!("请求成功{}", core::str::from_utf8(& response.data[..response.length]).unwrap());
                 }
                 Err(e) => {
+                    self.loading = false;
+                    self.error = Some("请求失败".to_string());
                     println!("请求失败{:?}",e);
                 }
             }
@@ -87,20 +97,13 @@ impl Page for CountDownPage{
             need_render:true,
             running:true,
             choose_index: 0,
+            loading: false,
+            error: None,
         }
     }
     async fn bind_event(&mut self) {
         event::clear().await;
 
-       /* let temp = move |aa| {
-            return Box::pin(async move {
-                let ptr = None;
-                let mut_ref: &mut Self = Self::mut_by_ptr(ptr.clone()).unwrap();
-                mut_ref.request().await;
-                println!("count_down_page:{}", mut_ref.choose_index);
-            });
-        };
-        event::on_target(EventType::KeyShort(2),Self::mut_to_ptr(self),  temp).await;*/
         event::on_target(EventType::KeyShort(2),Self::mut_to_ptr(self),  move |ptr|  {
             println!("current_page:" );
             return Box::pin(async move {
@@ -131,7 +134,7 @@ impl Page for CountDownPage{
         if self.need_render {
             self.need_render = false;
             if let Some(display) = display_mut() {
-                display.clear(TwoBitColor::White);
+                let _ = display.clear(TwoBitColor::White);
                 let style = MonoTextStyleBuilder::new()
                     .font(&embedded_graphics::mono_font::iso_8859_16::FONT_9X18)
                     .text_color(TwoBitColor::Black)
@@ -142,20 +145,37 @@ impl Page for CountDownPage{
                     U8g2TextStyle::new(fonts::u8g2_font_wqy12_t_gb2312b, TwoBitColor::Black);
 
                 let display_area = display.bounding_box();
-                let row = LinearLayout::horizontal(
+
+                let position = display_area.center();
+                if self.loading {
+                    let _ = Text::new("加载中。。。", Point::new(0,50), style.clone()).draw(display);
+                }else{
+
+                    if let Some(e) =  &self.error {
+                        let _ = Text::new(format!("加载失败,{}",e).as_str(), Point::new(0,50), style.clone()).draw(display);
+                    }else{
+                        let _ = Text::new("加载成功", Point::new(0,50), style.clone()).draw(display);
+                    }
+
+                }
+
+
+
+               /* let row = LinearLayout::horizontal(
                     Chain::new(Text::new("时间:", Point::zero(), style.clone()))
                         .append(Text::new("10", Point::zero(), style.clone()))
                         .append(Text::new("分钟", Point::zero(), style.clone())),
                 )
                     .with_alignment(vertical::Center)
                     .arrange();
-                LinearLayout::vertical( Chain::new(row) )
+                let _ = LinearLayout::vertical( Chain::new(row) )
                     .with_alignment(horizontal::Left)
                     .arrange()
                     .align_to(&display_area, horizontal::Left, vertical::Top)
                     .draw(display);
 
-                Text::new(" 时间:  时间: ", Point::new(0,50), style.clone()).draw(display);
+                let _ = Text::new(" 时间:  时间: ", Point::new(0,50), style.clone()).draw(display);
+*/
 
 
 

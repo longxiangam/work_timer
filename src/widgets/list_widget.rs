@@ -214,7 +214,7 @@ impl <C> Drawable for  ListItemWidget<C>  where C:PixelColor{
 
 
         let font: FontRenderer = FontRenderer::new::<fonts::u8g2_font_wqy16_t_gb2312>();
-        font.render_aligned(
+        let _ = font.render_aligned(
             format_args!("{} {}",tag, self.label),
             self.position+Point::new(10,5),
             VerticalPosition::Top,

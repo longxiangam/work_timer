@@ -1,3 +1,4 @@
+use alloc::string::String;
 use core::cell::RefCell;
 use core::future::Future;
 use embassy_executor::Spawner;
@@ -6,20 +7,35 @@ use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Timer};
 use esp_println::println;
 use static_cell::make_static;
-use crate::pages::count_down_page::CountDownPage;
+use crate::pages::clock_page::ClockPage;
 use crate::pages::main_page::MainPage;
 
 pub mod main_page;
-mod count_down_page;
+mod clock_page;
 mod games_page;
 
 
 enum PageEnum {
-    MainPage=0,
-    CountDownPage=1,
+    EMainPage,
+    EClockPage,
+    ETimerPage,
+    EWeatherPage,
+    ECalenderPage,
+    EChip8Page,
 
 }
-
+struct  MenuItem{
+    page_enum:PageEnum,
+    title:String,
+}
+impl MenuItem{
+    fn new(title:String, page_enum: PageEnum) -> MenuItem {
+        Self{
+            page_enum,
+            title,
+        }
+    }
+}
 
 
 pub trait Page {

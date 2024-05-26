@@ -2,7 +2,9 @@ use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
 use core::cell::RefCell;
+use core::fmt::Debug;
 use core::future::Future;
+use eg_seven_segment::SevenSegmentStyleBuilder;
 use embassy_executor::Spawner;
 use embassy_futures::select::{Either, select};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -13,8 +15,8 @@ use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::Drawable;
 use embedded_graphics::geometry::Point;
 use embedded_graphics::mono_font::MonoTextStyleBuilder;
-use embedded_graphics::prelude::Dimensions;
-use embedded_graphics::text::Text;
+use embedded_graphics::prelude::{Dimensions, Size};
+use embedded_graphics::text::{Alignment, Baseline, Text, TextStyleBuilder};
 use embedded_layout::align::{Align, horizontal, vertical};
 use embedded_layout::layout::linear::LinearLayout;
 use embedded_layout::object_chain::Chain;
@@ -30,8 +32,9 @@ use crate::pages::{ Page};
 use crate::pages::main_page::MainPage;
 use crate::request::{RequestClient, ResponseData};
 use crate::wifi::use_wifi;
+use crate::worldtime::{CLOCK_SYNC_SUCCESS, get_clock};
 
-pub struct  CountDownPage{
+pub struct ClockPage {
     begin_count:u32,
     current_count:u32,
     need_render:bool,
@@ -41,7 +44,7 @@ pub struct  CountDownPage{
     error:Option<String>
 }
 
-impl CountDownPage {
+impl ClockPage {
 
 
     fn increase(&mut self) {
@@ -87,9 +90,37 @@ impl CountDownPage {
         }
         println!("get stack" );
     }
+
+
+    fn draw_clock<D>(display: &mut D, time: &str) -> Result<(), D::Error>
+        where
+            D: DrawTarget<Color = TwoBitColor>,
+    {
+        let character_style = SevenSegmentStyleBuilder::new()
+            .digit_size(Size::new(30, 60))
+            .segment_width(5)
+            .segment_color(TwoBitColor::Black)
+            .build();
+
+        let text_style = TextStyleBuilder::new()
+            .alignment(Alignment::Center)
+            .baseline(Baseline::Middle)
+            .build();
+
+        Text::with_text_style(
+            &time,
+            display.bounding_box().center(),
+            character_style,
+            text_style,
+        )
+            .draw(display)?;
+
+        Ok(())
+    }
+
 }
 
-impl Page for CountDownPage{
+impl Page for ClockPage {
     fn new() -> Self {
         Self{
             begin_count:0,
@@ -154,7 +185,22 @@ impl Page for CountDownPage{
                     if let Some(e) =  &self.error {
                         let _ = Text::new(format!("加载失败,{}",e).as_str(), Point::new(0,50), style.clone()).draw(display);
                     }else{
-                        let _ = Text::new("加载成功", Point::new(0,50), style.clone()).draw(display);
+                        if *CLOCK_SYNC_SUCCESS.lock().await {
+                            if let Some(clock) = get_clock() {
+                                let local = clock.local().await;
+                                let hour = local.hour();
+                                let minute = local.minute();
+                                let second = local.second();
+
+
+                                let str = format_args!("{:02}:{:02}:{:02}",hour,minute,second).to_string();
+                                Self::draw_clock(display,str.as_str());
+                                let time = clock.get_date_time_str().await;
+                                let _ = Text::new(time.as_str(), Point::new(0, 12), style.clone()).draw(display);
+                            }
+                        }else{
+                            let _ = Text::new("同步时间...", Point::new(0,50), style.clone()).draw(display);
+                        }
                     }
 
                 }
@@ -186,20 +232,13 @@ impl Page for CountDownPage{
     }
 
     async fn run(&mut self,spawner: Spawner) {
-        let mut last_secs = Instant::now().as_secs();
         self.running = true;
         loop {
 
             if !self.running {
                 break;
             }
-
-            let current_secs = Instant::now().as_secs();
-            if current_secs != last_secs {
-                self.increase();
-                last_secs = current_secs;
-            }
-
+            self.need_render = true;
             self.render().await;
 
             Timer::after(Duration::from_millis(50)).await;

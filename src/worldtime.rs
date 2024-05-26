@@ -1,17 +1,21 @@
 use alloc::string::String;
+
 use core::fmt::Write;
+use embassy_futures::select::{Either, select};
+
 use embassy_net::{
     dns::DnsQueryType,
     udp::{PacketMetadata, UdpSocket},
     IpEndpoint, Stack,
 };
 use embassy_sync::{blocking_mutex::raw::CriticalSectionRawMutex, mutex::Mutex};
-use embassy_time::Instant;
+use embassy_time::{Instant, Timer};
 use esp_println::println;
 use esp_wifi::wifi::ipv4::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs};
 use esp_wifi::wifi::{WifiDevice, WifiStaDevice};
 
 use sntpc::{async_impl::{get_time,NtpUdpSocket }, NtpContext, NtpTimestampGenerator };
+use static_cell::make_static;
 use time::{Duration, OffsetDateTime, UtcOffset, Weekday};
 use time::macros::offset;
 use crate::wifi::use_wifi;
@@ -74,7 +78,7 @@ impl Clock {
 
         let dt = self.local().await;
         let year = dt.year();
-        let month = dt.month();
+        let month = dt.month() as u8;
         let day = dt.day();
         let day_title = match dt.weekday() {
             Weekday::Monday => "周一",
@@ -85,13 +89,10 @@ impl Clock {
             Weekday::Saturday => "周六",
             Weekday::Sunday => "周日",
         };
-        let hours = dt.hour();
-        let minutes = dt.minute();
-        let seconds = dt.second();
 
         let mut result = String::new();
-        let time_delimiter = if seconds % 2 == 0 { ":" } else { " " };
-        write!(result, "{day_title} : {year}-{month}-{day}  {hours:02}{time_delimiter}{minutes:02}").unwrap();
+
+        write!(result, "{year}-{month}-{day}-{day_title}").unwrap();
         result
     }
 }
@@ -188,7 +189,11 @@ async fn ntp_request(
     clock: &'static Clock,
 ) -> Result<(), SntpcError> {
     println!("Prepare NTP request");
-    let mut addrs = stack.dns_query(POOL_NTP_ADDR, DnsQueryType::A).await.unwrap();
+    let mut addrs = if let Ok(v) =  stack.dns_query(POOL_NTP_ADDR, DnsQueryType::A).await {
+        v
+    }else{
+        return  Err(SntpcError::NoAddr)
+    };
     let addr = addrs.pop().ok_or(SntpcError::DnsEmptyResponse)?;
     println!("NTP DNS: {:?}", addr);
 
@@ -210,34 +215,62 @@ async fn ntp_request(
     );
     socket.bind(1234).unwrap();
 
+    println!("NTP DNS request");
     let ntp_socket = NtpSocket { sock: socket };
     let ntp_context = NtpContext::new(TimestampGen::new(clock).await);
 
-    if let Ok(ntp_result) = get_time(sock_addr, ntp_socket, ntp_context).await{
-        println!("NTP response seconds: {}", ntp_result.seconds);
-        let now =
-            OffsetDateTime::from_unix_timestamp(ntp_result.seconds as i64).unwrap();
-        clock.set_time(now).await;
+    let  get_time_fut  = get_time(sock_addr, ntp_socket, ntp_context);
+    let timeout_fut = Timer::after_secs(5);
+    match select(get_time_fut,timeout_fut).await {
+        Either::First(ntp_result) => {
+            if let Ok(ntp_result) = ntp_result{
+                println!("NTP response seconds: {}", ntp_result.seconds);
+                let now =
+                    OffsetDateTime::from_unix_timestamp(ntp_result.seconds as i64).unwrap();
+                clock.set_time(now).await;
 
-        Ok(())
-    }else{
-        Err(SntpcError::BadNtpResponse)
+                Ok(())
+            }else{
+                Err(SntpcError::BadNtpResponse)
+            }
+        }
+        Either::Second(_) => {
+            Err(SntpcError::BadNtpResponse)
+        }
     }
+}
 
+pub static mut CLOCK: Option<&'static Clock>  =  None;
+pub static CLOCK_SYNC_SUCCESS:Mutex<CriticalSectionRawMutex,bool>   =  Mutex::new(false);
+
+pub fn get_clock()->Option<&'static Clock>{
+    unsafe {
+        return CLOCK;
+    }
 }
 
 
 #[embassy_executor::task]
-pub async fn ntp_worker(clock: &'static Clock) {
+pub async fn ntp_worker() {
+    let clock = make_static!(Clock::new());
+    unsafe {
+        CLOCK.replace(&*clock);
+    }
     loop {
         let stack = use_wifi().await.unwrap();
         println!("NTP Request");
+
         let sleep_sec = match ntp_request(stack, clock).await {
             Err(_) => {
                 println!("NTP error response");
                 5
             }
-            Ok(_) => 3600,
+            Ok(_) => {
+                println!("NTP ok ?");
+                let mut sync_success = CLOCK_SYNC_SUCCESS.lock().await;
+                *sync_success = true;
+                3600
+            },
         };
         embassy_time::Timer::after(embassy_time::Duration::from_secs(sleep_sec)).await;
     }

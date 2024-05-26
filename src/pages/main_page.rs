@@ -31,9 +31,10 @@ use u8g2_fonts::fonts;
 use crate::{display, event};
 use crate::display::{display_mut, draw_text_2, RENDER_CHANNEL, RenderInfo};
 use crate::event::EventType;
-use crate::pages::count_down_page::{ CountDownPage};
-use crate::pages::{ Page};
+use crate::pages::clock_page::{ClockPage};
+use crate::pages::{MenuItem, Page, PageEnum};
 use crate::pages::games_page::GamesPage;
+use crate::pages::PageEnum::{ECalenderPage, EChip8Page, EClockPage, ETimerPage, EWeatherPage};
 use crate::widgets::list_widget::ListWidget;
 
 static MAIN_PAGE:Mutex<CriticalSectionRawMutex,RefCell<Option<MainPage>> > = Mutex::new(RefCell::new(None));
@@ -43,15 +44,12 @@ pub struct MainPageInfo{
     pub count:i32
 }
 
-struct  MenuItem{
-    key:String,
-    title:String,
-}
+
 
 ///每个page 包含状态与绘制与逻辑处理
 ///状态通过事件改变，并触发绘制
 pub struct MainPage{
-    current_page:u32,
+    current_page:Option<u32>,
     choose_index:u32,
     is_long_start:bool,
     need_render:bool,
@@ -79,7 +77,7 @@ impl MainPage {
 
 
     fn increase(&mut self){
-        if self.choose_index < self.menus.as_mut().unwrap().len() as u32 {
+        if self.choose_index < (self.menus.as_mut().unwrap().len() - 1) as u32 {
             self.choose_index += 1;
             self.need_render = true;
         }
@@ -93,7 +91,7 @@ impl MainPage {
     }
 
     async fn back(&mut self){
-        self.current_page = 0;
+        self.current_page = None;
         self.need_render = true;
         Self::bind_event(self).await;
     }
@@ -102,16 +100,15 @@ impl Page for  MainPage{
 
     fn new()->Self{
 
-
-        let mut menus = vec![];
-        for i in 0..20 {
-            menus.push(MenuItem{
-                title:format!("菜单项{}",i),
-                key:i.to_string()
-            });
-        }
+        let menus = vec![
+            MenuItem::new("时钟".to_string(), EClockPage),
+            MenuItem::new("定时器".to_string(), ETimerPage),
+            MenuItem::new("天气".to_string(), EWeatherPage),
+            MenuItem::new("日历".to_string(), ECalenderPage),
+            MenuItem::new("游戏".to_string(), EChip8Page),
+        ];
         Self{
-            current_page:0,
+            current_page:None,
             choose_index:0,
             is_long_start:false,
             need_render:true,
@@ -164,7 +161,7 @@ impl Page for  MainPage{
             println!("current_page:" );
             return Box::pin( async {
                 let mut_ref = Self::get_mut().await.unwrap();
-                mut_ref.current_page = mut_ref.choose_index;
+                mut_ref.current_page = Some( mut_ref.choose_index);
                 println!("current_page:{}",Self::get_mut().await.unwrap().choose_index );
             });
         }).await;
@@ -220,25 +217,46 @@ impl Page for  MainPage{
     async fn run(&mut self,spawner: Spawner){
 
         loop {
-            if self.current_page == 0 {
-                //监听事件
+            if  None == self.current_page {
                 self.render().await;
-            } else if self.current_page == 1 {
-
-                let mut count_down_page = CountDownPage::new();
-                count_down_page.bind_event().await;
-                count_down_page.run(spawner).await;
-
-                //切换到主页并绑定事件
-                self.back().await;
-            }else if self.current_page == 2 {
-                let mut games_page = GamesPage::new();
-                games_page.bind_event().await;
-                games_page.run(spawner).await;
-
-                //切换到主页并绑定事件
-                self.back().await;
+                Timer::after(Duration::from_millis(50)).await;
+                continue;
             }
+            let current_page = self.current_page.unwrap();
+            let menuItem = &self.menus.as_mut().unwrap()[current_page as usize];
+            match menuItem.page_enum {
+                PageEnum::EMainPage => {
+
+                }
+                EClockPage => {
+                    let mut clock_page = ClockPage::new();
+                    clock_page.bind_event().await;
+                    clock_page.run(spawner).await;
+
+                    //切换到主页并绑定事件
+                    self.back().await;
+                }
+                ETimerPage => {
+                    self.back().await;
+                }
+                EWeatherPage => {
+                    self.back().await;
+                }
+                ECalenderPage => {
+                    self.back().await;
+                }
+                EChip8Page => {
+                    let mut games_page = GamesPage::new();
+                    games_page.bind_event().await;
+                    games_page.run(spawner).await;
+
+                    //切换到主页并绑定事件
+                    self.back().await;
+                }
+
+
+            }
+
             Timer::after(Duration::from_millis(50)).await;
         }
     }

@@ -12,7 +12,9 @@ use esp_wifi::wifi::ipv4::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs};
 use esp_wifi::wifi::{WifiDevice, WifiStaDevice};
 
 use sntpc::{async_impl::{get_time,NtpUdpSocket }, NtpContext, NtpTimestampGenerator };
-use time::{Duration, OffsetDateTime, Weekday};
+use time::{Duration, OffsetDateTime, UtcOffset, Weekday};
+use time::macros::offset;
+use crate::wifi::use_wifi;
 
 
 const POOL_NTP_ADDR: &str = "pool.ntp.org";
@@ -64,17 +66,24 @@ impl Clock {
         let elapsed = Instant::now().as_millis();
         *sys_start + Duration::milliseconds(elapsed as i64)
     }
+    pub async fn local(&self) ->OffsetDateTime{
+        self.now().await.to_offset(UtcOffset::from_hms(8,0,0).unwrap())
+    }
 
     pub(crate) async fn get_date_time_str(&self) -> String {
-        let dt = self.now().await;
+
+        let dt = self.local().await;
+        let year = dt.year();
+        let month = dt.month();
+        let day = dt.day();
         let day_title = match dt.weekday() {
-            Weekday::Monday => "Mon",
-            Weekday::Tuesday => "Tue",
-            Weekday::Wednesday => "Wed",
-            Weekday::Thursday => "Thu",
-            Weekday::Friday => "Fri",
-            Weekday::Saturday => "Sat",
-            Weekday::Sunday => "Sun",
+            Weekday::Monday => "周一",
+            Weekday::Tuesday => "周二",
+            Weekday::Wednesday => "周三",
+            Weekday::Thursday => "周四",
+            Weekday::Friday => "周五",
+            Weekday::Saturday => "周六",
+            Weekday::Sunday => "周日",
         };
         let hours = dt.hour();
         let minutes = dt.minute();
@@ -82,7 +91,7 @@ impl Clock {
 
         let mut result = String::new();
         let time_delimiter = if seconds % 2 == 0 { ":" } else { " " };
-        write!(result, "{day_title} {hours:02}{time_delimiter}{minutes:02}").unwrap();
+        write!(result, "{day_title} : {year}-{month}-{day}  {hours:02}{time_delimiter}{minutes:02}").unwrap();
         result
     }
 }
@@ -204,24 +213,29 @@ async fn ntp_request(
     let ntp_socket = NtpSocket { sock: socket };
     let ntp_context = NtpContext::new(TimestampGen::new(clock).await);
 
-    let ntp_result = get_time(sock_addr, ntp_socket, ntp_context).await.unwrap();
-    println!("NTP response seconds: {}", ntp_result.seconds);
-    let now =
-        OffsetDateTime::from_unix_timestamp(ntp_result.seconds as i64).unwrap();
-    clock.set_time(now).await;
+    if let Ok(ntp_result) = get_time(sock_addr, ntp_socket, ntp_context).await{
+        println!("NTP response seconds: {}", ntp_result.seconds);
+        let now =
+            OffsetDateTime::from_unix_timestamp(ntp_result.seconds as i64).unwrap();
+        clock.set_time(now).await;
 
-    Ok(())
+        Ok(())
+    }else{
+        Err(SntpcError::BadNtpResponse)
+    }
+
 }
 
 
 #[embassy_executor::task]
-pub async fn ntp_worker(stack: &'static Stack<WifiDevice<'static,WifiStaDevice>>, clock: &'static Clock) {
+pub async fn ntp_worker(clock: &'static Clock) {
     loop {
+        let stack = use_wifi().await.unwrap();
         println!("NTP Request");
         let sleep_sec = match ntp_request(stack, clock).await {
             Err(_) => {
                 println!("NTP error response");
-                10
+                5
             }
             Ok(_) => 3600,
         };

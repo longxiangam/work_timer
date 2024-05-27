@@ -72,7 +72,7 @@ impl ClockPage {
             println!("请求 stack 成功");
             let mut request = RequestClient::new(v).await;
             println!("开始请求成功");
-            let result = request.send_request("https://worldtimeapi.org/api/timezone/Europe/Copenhagen.txt").await;
+            let result = request.send_request("https://api.qweather.com/v7/weather/now?location=xxx&key=xxx").await;
             match result {
                 Ok(response) => {
                     finish_wifi().await;

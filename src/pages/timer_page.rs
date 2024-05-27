@@ -31,10 +31,10 @@ use crate::event::EventType;
 use crate::pages::{ Page};
 use crate::pages::main_page::MainPage;
 use crate::request::{RequestClient, ResponseData};
-use crate::wifi::{finish_wifi, use_wifi};
+use crate::wifi::use_wifi;
 use crate::worldtime::{CLOCK_SYNC_SUCCESS, get_clock};
 
-pub struct ClockPage {
+pub struct TimerPage {
     begin_count:u32,
     current_count:u32,
     need_render:bool,
@@ -44,8 +44,7 @@ pub struct ClockPage {
     error:Option<String>
 }
 
-impl ClockPage {
-
+impl TimerPage {
 
     fn increase(&mut self) {
         if self.choose_index < 500 {
@@ -62,53 +61,6 @@ impl ClockPage {
     }
     fn back(&mut self){
         self.running = false;
-    }
-
-    async fn request(&mut self){
-        self.loading = true;
-        self.error = None;
-        let stack = use_wifi().await;
-        if let Ok(v) = stack {
-            println!("请求 stack 成功");
-            let mut request = RequestClient::new(v).await;
-            println!("开始请求成功");
-            let result = request.send_request("https://worldtimeapi.org/api/timezone/Europe/Copenhagen.txt").await;
-            match result {
-                Ok(response) => {
-                    finish_wifi().await;
-                    self.loading = false;
-                    self.error = None;
-                    println!("请求成功{}", core::str::from_utf8(& response.data[..response.length]).unwrap());
-                }
-                Err(e) => {
-                    finish_wifi().await;
-                    self.loading = false;
-                    self.error = Some("请求失败".to_string());
-                    println!("请求失败{:?}",e);
-                }
-            }
-            println!("get stack ok" );
-        }else{
-            self.loading = false;
-            self.error = Some("请求失败".to_string());
-            println!("get stack err" );
-        }
-        println!("get stack" );
-    }
-    async fn sync_time(&mut self) {
-        let stack = use_wifi().await;
-        if let Ok(v) = stack {
-            let sleep_sec = match crate::worldtime::ntp_request(v, get_clock().unwrap()).await {
-                Err(_) => {
-                    finish_wifi().await;
-                    println!("NTP error response");
-                }
-                Ok(_) => {
-                    finish_wifi().await;
-                    println!("NTP ok ?");
-                },
-            };
-        }
     }
 
     fn draw_clock<D>(display: &mut D, time: &str) -> Result<(), D::Error>
@@ -139,7 +91,7 @@ impl ClockPage {
 
 }
 
-impl Page for ClockPage {
+impl Page for TimerPage {
     fn new() -> Self {
         Self{
             begin_count:0,
@@ -158,7 +110,6 @@ impl Page for ClockPage {
             println!("current_page:" );
             return Box::pin(async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
-                mut_ref.request().await;
                 println!("count_down_page:{}",mut_ref.choose_index );
             });
         }).await;
@@ -166,7 +117,7 @@ impl Page for ClockPage {
             println!("current_page:" );
             return Box::pin(async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
-                mut_ref.sync_time().await;
+                mut_ref.increase();
                 println!("count_down_page:{}",mut_ref.choose_index );
             });
         }).await;
@@ -175,6 +126,7 @@ impl Page for ClockPage {
             return Box::pin(async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
                 mut_ref.back();
+                println!("count_down_page:{}",mut_ref.choose_index );
             });
         }).await;
     }

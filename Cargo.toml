@@ -37,6 +37,12 @@ chip8={package = "hello-rust", path="../reference/wasm-rust-chip8"}
 wavv = { version = "0.1.4" }
 
 #heapless = { version = "0.8",features = ["portable-atomic-critical-section"] }
-reqwless = { version = "0.11", default-features = false }
+#embedded-tls={version = "0.17"  , default-features = false}
 sntpc = {version = "0.3",features = ["async"] , default-features = false}
+
+reqwless = { version = "0.12", default-features = false }
+esp-mbedtls = { git = "https://github.com/esp-rs/esp-mbedtls.git",  features = ["esp32c3"] }
+
+
 eg-seven-segment ={version = "0.2"}
+rand_core = { version = "0.6.4" , default-features = false ,features = ["alloc"]}

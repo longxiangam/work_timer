@@ -13,6 +13,7 @@ use crate::pages::main_page::MainPage;
 pub mod main_page;
 mod clock_page;
 mod games_page;
+mod timer_page;
 
 
 enum PageEnum {

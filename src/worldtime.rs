@@ -18,7 +18,7 @@ use sntpc::{async_impl::{get_time,NtpUdpSocket }, NtpContext, NtpTimestampGenera
 use static_cell::make_static;
 use time::{Duration, OffsetDateTime, UtcOffset, Weekday};
 use time::macros::offset;
-use crate::wifi::use_wifi;
+use crate::wifi::{finish_wifi, use_wifi};
 
 
 const POOL_NTP_ADDR: &str = "pool.ntp.org";
@@ -184,7 +184,7 @@ impl NtpTimestampGenerator for TimestampGen {
 }
 
 
-async fn ntp_request(
+pub async fn ntp_request(
     stack: &'static Stack<WifiDevice<'static,WifiStaDevice>>,
     clock: &'static Clock,
 ) -> Result<(), SntpcError> {
@@ -257,21 +257,31 @@ pub async fn ntp_worker() {
         CLOCK.replace(&*clock);
     }
     loop {
-        let stack = use_wifi().await.unwrap();
-        println!("NTP Request");
-
-        let sleep_sec = match ntp_request(stack, clock).await {
-            Err(_) => {
-                println!("NTP error response");
+        let sleep_sec =  match use_wifi().await{
+            Ok(stack) =>{
+                println!("NTP Request");
+                match ntp_request(stack, clock).await {
+                    Err(_) => {
+                        finish_wifi().await;
+                        println!("NTP error response");
+                        5
+                    }
+                    Ok(_) => {
+                        finish_wifi().await;
+                        println!("NTP ok ?");
+                        let mut sync_success = CLOCK_SYNC_SUCCESS.lock().await;
+                        *sync_success = true;
+                        3600
+                    },
+                }
+            }
+            Err(e) => {
+                println!("get stack err:{:?}",e);
                 5
             }
-            Ok(_) => {
-                println!("NTP ok ?");
-                let mut sync_success = CLOCK_SYNC_SUCCESS.lock().await;
-                *sync_success = true;
-                3600
-            },
         };
+
+
         embassy_time::Timer::after(embassy_time::Duration::from_secs(sleep_sec)).await;
     }
 }

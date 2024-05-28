@@ -74,12 +74,9 @@ impl Clock {
         self.now().await.to_offset(UtcOffset::from_hms(8,0,0).unwrap())
     }
 
-    pub(crate) async fn get_date_time_str(&self) -> String {
+    pub(crate) async fn get_week_day(&self) -> String {
 
         let dt = self.local().await;
-        let year = dt.year();
-        let month = dt.month() as u8;
-        let day = dt.day();
         let day_title = match dt.weekday() {
             Weekday::Monday => "周一",
             Weekday::Tuesday => "周二",
@@ -92,7 +89,20 @@ impl Clock {
 
         let mut result = String::new();
 
-        write!(result, "{year}-{month}-{day}-{day_title}").unwrap();
+        write!(result, "{day_title}").unwrap();
+        result
+    }
+
+    pub(crate) async fn get_date_str(&self) -> String {
+
+        let dt = self.local().await;
+        let year = dt.year();
+        let month = dt.month() as u8;
+        let day = dt.day();
+
+        let mut result = String::new();
+
+        write!(result, "{year}-{month}-{day}").unwrap();
         result
     }
 }

@@ -4,6 +4,7 @@ use alloc::string::{String, ToString};
 use core::cell::RefCell;
 use core::fmt::Debug;
 use core::future::Future;
+use core::str::from_utf8;
 use eg_seven_segment::SevenSegmentStyleBuilder;
 use embassy_executor::Spawner;
 use embassy_futures::select::{Either, select};
@@ -22,12 +23,16 @@ use embedded_layout::layout::linear::LinearLayout;
 use embedded_layout::object_chain::Chain;
 use esp_println::println;
 use lcd_drivers::color::TwoBitColor;
+use lite_json::{JsonValue, parse_json};
+
 use u8g2_fonts::U8g2TextStyle;
 use u8g2_fonts::fonts;
 
 use crate::display::{display_mut, RENDER_CHANNEL, RenderInfo};
 use crate::event;
 use crate::event::EventType;
+use crate::model::seniverse::{DailyResult, form_json};
+
 use crate::pages::{ Page};
 use crate::pages::main_page::MainPage;
 use crate::request::{RequestClient, ResponseData};
@@ -41,7 +46,7 @@ pub struct ClockPage {
     choose_index:u32,
     running:bool,
     loading:bool,
-    error:Option<String>
+    error:Option<String>,
 }
 
 impl ClockPage {
@@ -72,12 +77,15 @@ impl ClockPage {
             println!("请求 stack 成功");
             let mut request = RequestClient::new(v).await;
             println!("开始请求成功");
-            let result = request.send_request("https://worldtimeapi.org/api/timezone/Europe/Copenhagen.txt").await;
+            //let result = request.send_request("https://worldtimeapi.org/api/timezone/Europe/Copenhagen.txt").await;
+            let result = request.send_request("http://api.seniverse.com/v3/weather/daily.json?key=SvRIiZPU5oGiqcHc1&location=beijing&language=en&unit=c&start=0&days=5").await;
             match result {
                 Ok(response) => {
                     finish_wifi().await;
                     self.loading = false;
                     self.error = None;
+                    let daily_result = form_json(&response.data[..response.length]);
+
                     println!("请求成功{}", core::str::from_utf8(& response.data[..response.length]).unwrap());
                 }
                 Err(e) => {
@@ -170,6 +178,8 @@ impl Page for ClockPage {
                 println!("count_down_page:{}",mut_ref.choose_index );
             });
         }).await;
+
+
         event::on_target(EventType::KeyShort(5),Self::mut_to_ptr(self),  move |ptr|  {
             println!("current_page:" );
             return Box::pin(async move {
@@ -213,7 +223,7 @@ impl Page for ClockPage {
 
                                 let str = format_args!("{:02}:{:02}:{:02}",hour,minute,second).to_string();
                                 Self::draw_clock(display,str.as_str());
-                                let time = clock.get_date_time_str().await;
+                                let time = clock.get_date_str().await;
                                 let _ = Text::new(time.as_str(), Point::new(0, 12), style.clone()).draw(display);
                             }
                         }else{
@@ -243,49 +253,3 @@ impl Page for ClockPage {
         }
     }
 }
-
-
-
-static INCREASE_CHANNEL:Channel<CriticalSectionRawMutex,bool, 2> = Channel::new();
-static DECREASE_CHANNEL:Channel<CriticalSectionRawMutex,bool, 2> = Channel::new();
-/*#[embassy_executor::task]
-async fn increase(){
-    loop {
-        INCREASE_CHANNEL.receive().await;
-        loop {
-            let a = Timer::after(Duration::from_millis(100));
-            let b = INCREASE_CHANNEL.receive();
-            match select(a,b).await {
-                Either::First(_) => {
-                    CountDownPage::get_mut().await.unwrap().increase();
-                }
-                Either::Second(_) => {
-                    break;
-                }
-            }
-        }
-        Timer::after(Duration::from_millis(100)).await;
-    }
-}
-
-
-#[embassy_executor::task]
-async fn decrease(){
-    loop {
-        DECREASE_CHANNEL.receive().await;
-        loop {
-            let a = Timer::after(Duration::from_millis(100));
-            let b = DECREASE_CHANNEL.receive();
-            match select(a,b).await {
-                Either::First(_) => {
-                    CountDownPage::get_mut().await.unwrap().decrease();
-                }
-                Either::Second(_) => {
-                    break;
-                }
-            }
-        }
-        Timer::after(Duration::from_millis(100)).await;
-    }
-}
-*/

@@ -1,10 +1,10 @@
 use alloc::boxed::Box;
-use alloc::{format, vec};
 use alloc::fmt::format;
-use alloc::string::{String, ToString};
-use alloc::vec::Vec;
+use heapless::String;
+use heapless::Vec;
 use core::cell::RefCell;
 use core::convert::Infallible;
+use core::str::FromStr;
 use embassy_executor::Spawner;
 use embassy_futures::select::{Either, select, Select};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -35,6 +35,7 @@ use crate::pages::clock_page::{ClockPage};
 use crate::pages::{MenuItem, Page, PageEnum};
 use crate::pages::games_page::GamesPage;
 use crate::pages::PageEnum::{ECalenderPage, EChip8Page, EClockPage, ETimerPage, EWeatherPage};
+use crate::pages::weather_page::WeatherPage;
 use crate::widgets::list_widget::ListWidget;
 
 static MAIN_PAGE:Mutex<CriticalSectionRawMutex,RefCell<Option<MainPage>> > = Mutex::new(RefCell::new(None));
@@ -53,7 +54,7 @@ pub struct MainPage{
     choose_index:u32,
     is_long_start:bool,
     need_render:bool,
-    menus:Option<Vec<MenuItem>>
+    menus:Option<Vec<MenuItem,20>>
 }
 
 impl MainPage {
@@ -100,13 +101,19 @@ impl Page for  MainPage{
 
     fn new()->Self{
 
-        let menus = vec![
-            MenuItem::new("时钟".to_string(), EClockPage),
+        let mut menus = Vec::new();
+        menus.push(MenuItem::new(String::<20>::from_str("时钟").unwrap(), EClockPage));
+        menus.push(MenuItem::new(String::<20>::from_str("定时器").unwrap(), ETimerPage));
+        menus.push(MenuItem::new(String::<20>::from_str("天气").unwrap(), EWeatherPage));
+        menus.push(MenuItem::new(String::<20>::from_str("日历").unwrap(), ECalenderPage));
+        menus.push(MenuItem::new(String::<20>::from_str("游戏").unwrap(), EChip8Page));
+
+       /*     MenuItem::new(String::from_str("时钟"), EClockPage),
             MenuItem::new("定时器".to_string(), ETimerPage),
             MenuItem::new("天气".to_string(), EWeatherPage),
             MenuItem::new("日历".to_string(), ECalenderPage),
             MenuItem::new("游戏".to_string(), EChip8Page),
-        ];
+        */
         Self{
             current_page:None,
             choose_index:0,
@@ -192,7 +199,7 @@ impl Page for  MainPage{
                 self.need_render = false;
 
                 let _ = display.clear(TwoBitColor::White);
-                let menus:Vec<&str> = self.menus.as_ref().unwrap().iter().map(|v|{ v.title.as_str() }).collect();
+                let menus:Vec<&str,20> = self.menus.as_ref().unwrap().iter().map(|v|{ v.title.as_str() }).collect();
 
 
                 let mut list_widget = ListWidget::new(Point::new(0, 0)
@@ -240,6 +247,9 @@ impl Page for  MainPage{
                     self.back().await;
                 }
                 EWeatherPage => {
+                    let mut clock_page = WeatherPage::new();
+                    clock_page.bind_event().await;
+                    clock_page.run(spawner).await;
                     self.back().await;
                 }
                 ECalenderPage => {

@@ -1,4 +1,4 @@
-use alloc::string::String;
+use heapless::String;
 use core::cell::RefCell;
 use core::future::Future;
 use embassy_executor::Spawner;
@@ -14,6 +14,7 @@ pub mod main_page;
 mod clock_page;
 mod games_page;
 mod timer_page;
+mod weather_page;
 
 
 enum PageEnum {
@@ -27,10 +28,10 @@ enum PageEnum {
 }
 struct  MenuItem{
     page_enum:PageEnum,
-    title:String,
+    title:String<20>,
 }
 impl MenuItem{
-    fn new(title:String, page_enum: PageEnum) -> MenuItem {
+    fn new(title:String<20>, page_enum: PageEnum) -> MenuItem {
         Self{
             page_enum,
             title,

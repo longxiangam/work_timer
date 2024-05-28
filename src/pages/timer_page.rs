@@ -165,7 +165,7 @@ impl Page for TimerPage {
 
                                 let str = format_args!("{:02}:{:02}:{:02}",hour,minute,second).to_string();
                                 Self::draw_clock(display,str.as_str());
-                                let time = clock.get_date_time_str().await;
+                                let time = clock.get_date_str().await;
                                 let _ = Text::new(time.as_str(), Point::new(0, 12), style.clone()).draw(display);
                             }
                         }else{

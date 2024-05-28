@@ -1,10 +1,8 @@
 use alloc::boxed::Box;
-use alloc::vec;
-use alloc::vec::Vec;
-use core::cell::RefCell;
-use core::convert::Infallible;
+
+use heapless::Vec;
+
 use core::future::Future;
-use core::ops::Deref;
 use core::pin::Pin;
 use embassy_futures::select::{Either, Either4, select, Select, select4};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -44,7 +42,7 @@ struct Listener{
     fixed:bool,//是否常驻事件
 }
 
-static LISTENER:Mutex<CriticalSectionRawMutex,Vec<Listener>>  = Mutex::new(vec![]) ;
+static LISTENER:Mutex<CriticalSectionRawMutex,Vec<Listener,20>>  = Mutex::new(Vec::new()) ;
 pub async fn on<F>(event_type: EventType, callback: F)
 where F: FnMut(Option<usize>) -> (Pin<Box<dyn Future<Output=()>  + 'static>>) + Send + Sync + 'static,
 {

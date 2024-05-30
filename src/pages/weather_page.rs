@@ -138,8 +138,8 @@ impl Page for  WeatherPage{
 
                             let mut y = 10;
                             for one in weather.daily.iter() {
-
-                                let str = format_args!("{} 天气：{}，温度：{}-{}",one.date,one.text_day,one.low,one.high).to_string();
+                                let (year, date) = one.date.split_once('-').unwrap();
+                                let str = format_args!("{} 天气：{}，温度：{}-{}",date,one.text_day,one.low,one.high).to_string();
                                 let _ = Text::new(str.as_str(), Point::new(0, y), style.clone()).draw(display);
                                 y+=15;
                             }

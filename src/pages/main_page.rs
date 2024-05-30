@@ -35,6 +35,7 @@ use crate::pages::clock_page::{ClockPage};
 use crate::pages::{MenuItem, Page, PageEnum};
 use crate::pages::games_page::GamesPage;
 use crate::pages::PageEnum::{ECalenderPage, EChip8Page, EClockPage, ETimerPage, EWeatherPage};
+use crate::pages::timer_page::TimerPage;
 use crate::pages::weather_page::WeatherPage;
 use crate::widgets::list_widget::ListWidget;
 
@@ -244,6 +245,9 @@ impl Page for  MainPage{
                     self.back().await;
                 }
                 ETimerPage => {
+                    let mut timer_page = TimerPage::new();
+                    timer_page.bind_event().await;
+                    timer_page.run(spawner).await;
                     self.back().await;
                 }
                 EWeatherPage => {

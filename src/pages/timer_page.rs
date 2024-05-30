@@ -36,9 +36,10 @@ use crate::worldtime::{CLOCK_SYNC_SUCCESS, get_clock};
 
 pub struct TimerPage {
     begin_count:u32,
-    current_count:u32,
     need_render:bool,
-    choose_index:u32,
+    current_count:u32,
+    starting:bool,
+    finished:bool,
     running:bool,
     loading:bool,
     error:Option<String>
@@ -47,20 +48,59 @@ pub struct TimerPage {
 impl TimerPage {
 
     fn increase(&mut self) {
-        if self.choose_index < 500 {
-            self.choose_index += 1;
-            self.need_render = true;
+        if !self.starting {
+            if self.current_count < 3600 * 2 {
+                self.current_count += 10;
+                self.need_render = true;
+            }else{
+                self.current_count = 3600 * 2;
+                self.need_render = true;
+            }
         }
     }
 
     fn decrease(&mut self) {
-        if self.choose_index > 0 {
-            self.choose_index -= 1;
-            self.need_render = true;
+        if !self.starting {
+            if self.current_count > 10 {
+                self.current_count -= 10;
+                self.need_render = true;
+            }else {
+                self.current_count = 0;
+                self.need_render = true;
+            }
         }
     }
+
+    fn step(&mut self){
+        if self.begin_count == 0 {
+            //正
+            self.current_count +=1;
+
+        }else{
+            //倒
+            if self.current_count > 0{
+                self.finished = false;
+                self.current_count -=1;
+            }
+            if self.current_count == 0 {
+                self.finished = true;
+            }
+        }
+
+        self.need_render = true;
+    }
+
     fn back(&mut self){
         self.running = false;
+    }
+
+    fn toggle_starting(&mut self){
+        if self.starting {
+            self.starting = false;
+        }else{
+            self.starting = true;
+            self.begin_count = self.current_count;
+        }
     }
 
     fn draw_clock<D>(display: &mut D, time: &str) -> Result<(), D::Error>
@@ -97,8 +137,9 @@ impl Page for TimerPage {
             begin_count:0,
             current_count:0,
             need_render:true,
+            starting:false,
+            finished: false,
             running:true,
-            choose_index: 0,
             loading: false,
             error: None,
         }
@@ -110,7 +151,8 @@ impl Page for TimerPage {
             println!("current_page:" );
             return Box::pin(async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
-                println!("count_down_page:{}",mut_ref.choose_index );
+                mut_ref.decrease();
+                println!("count_down_page:{}",mut_ref.current_count );
             });
         }).await;
         event::on_target(EventType::KeyShort(1),Self::mut_to_ptr(self),  move |ptr|  {
@@ -118,15 +160,42 @@ impl Page for TimerPage {
             return Box::pin(async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
                 mut_ref.increase();
-                println!("count_down_page:{}",mut_ref.choose_index );
+                println!("count_down_page:{}",mut_ref.current_count );
             });
         }).await;
-        event::on_target(EventType::KeyShort(5),Self::mut_to_ptr(self),  move |ptr|  {
+
+        event::on_target(EventType::KeyShort(4),Self::mut_to_ptr(self),  move |ptr|  {
             println!("current_page:" );
             return Box::pin(async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
                 mut_ref.back();
-                println!("count_down_page:{}",mut_ref.choose_index );
+                println!("count_down_page:{}",mut_ref.current_count );
+            });
+        }).await;
+
+        event::on_target(EventType::KeyShort(5),Self::mut_to_ptr(self),  move |ptr|  {
+            println!("current_page:" );
+            return Box::pin(async move {
+                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                mut_ref.toggle_starting();
+                println!("count_down_page:{}",mut_ref.current_count );
+            });
+        }).await;
+
+
+        event::on_target(EventType::WheelFront,Self::mut_to_ptr(self),  |ptr|  {
+            println!("current_page:" );
+            return Box::pin( async move {
+                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                mut_ref.increase();
+            });
+        }).await;
+
+        event::on_target(EventType::WheelBack,Self::mut_to_ptr(self),  |ptr|  {
+            println!("current_page:" );
+            return Box::pin( async move {
+                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                mut_ref.decrease();
             });
         }).await;
     }
@@ -136,61 +205,39 @@ impl Page for TimerPage {
             self.need_render = false;
             if let Some(display) = display_mut() {
                 let _ = display.clear(TwoBitColor::White);
-                let style = MonoTextStyleBuilder::new()
-                    .font(&embedded_graphics::mono_font::iso_8859_16::FONT_9X18)
-                    .text_color(TwoBitColor::Black)
-                    .background_color(TwoBitColor::White)
-                    .build();
 
-                let style =
-                    U8g2TextStyle::new(fonts::u8g2_font_wqy12_t_gb2312b, TwoBitColor::Black);
+                let second =  self.current_count%60;
+                let minute = self.current_count / 60 % 60;
+                let hour = self.current_count / 3600;
 
-                let display_area = display.bounding_box();
+                let time = format!("{hour}:{minute}:{second}");
 
-                let position = display_area.center();
-                if self.loading {
-                    let _ = Text::new("加载中。。。", Point::new(0,50), style.clone()).draw(display);
-                }else{
-
-                    if let Some(e) =  &self.error {
-                        let _ = Text::new(format!("加载失败,{}",e).as_str(), Point::new(0,50), style.clone()).draw(display);
-                    }else{
-                        if *CLOCK_SYNC_SUCCESS.lock().await {
-                            if let Some(clock) = get_clock() {
-                                let local = clock.local().await;
-                                let hour = local.hour();
-                                let minute = local.minute();
-                                let second = local.second();
-
-
-                                let str = format_args!("{:02}:{:02}:{:02}",hour,minute,second).to_string();
-                                Self::draw_clock(display,str.as_str());
-                                let time = clock.get_date_str().await;
-                                let _ = Text::new(time.as_str(), Point::new(0, 12), style.clone()).draw(display);
-                            }
-                        }else{
-                            let _ = Text::new("同步时间...", Point::new(0,50), style.clone()).draw(display);
-                        }
-                    }
-
-                }
+                Self::draw_clock(display,time.as_str());
 
                 RENDER_CHANNEL.send(RenderInfo { time: 0 }).await;
-
             }
         }
     }
 
     async fn run(&mut self,spawner: Spawner) {
         self.running = true;
+        let mut last_time = 0 ;
         loop {
-
             if !self.running {
                 break;
             }
-            self.need_render = true;
-            self.render().await;
 
+            if self.starting {
+                if last_time == 0 {
+                    last_time = Instant::now().as_secs();
+                }
+                if Instant::now().as_secs() > last_time {
+                    last_time = Instant::now().as_secs();
+                    self.step();
+                }
+            }
+
+            self.render().await;
             Timer::after(Duration::from_millis(50)).await;
         }
     }

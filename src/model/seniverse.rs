@@ -1,7 +1,9 @@
-use alloc::string::ToString;
+
+use core::str::FromStr;
 use esp_println::println;
 use heapless::{String, Vec};
-use lite_json::parse_json;
+use mini_json::parse_json;
+
 //三日
 #[derive( Debug)]
 pub struct  DailyResponse{
@@ -43,7 +45,7 @@ macro_rules! set_field {
     ($temp:ident, $one:ident,$key:ident, $($key_liter:literal => $field:ident),*) => {
         $(
             if $key.eq($key_liter) {
-                $temp.$field = $one.1.as_string().unwrap().iter().collect();
+                $temp.$field = $one.1.get_string().unwrap().chars().collect();
             }
         )*
     };
@@ -54,55 +56,35 @@ pub fn form_json(str:&[u8])->Option<DailyResponse>{
     let result = parse_json(core::str::from_utf8(str).unwrap());
     match result {
         Ok(json_data) => {
-            println!("json:{:?}", json_data.is_object());
+
             let mut location:Option<Location> = None;
             let mut daily:Vec<Daily,5 > = Vec::new();
-            let mut lastUpdate:String<40> = String::new();
-            if json_data.is_object() {
-                //results
-                for result_ in json_data.as_object().unwrap().iter() {
-                    //results array
-                    if result_.1.is_array() {
-                        for result__ in result_.1.as_array().unwrap().iter() {
-                            println!("key:{:?},value:{:?}", result_.0, result_.1.is_array());
+            let mut last_update:String<40> = String::new();
+            let temp_array = json_data.get("results").unwrap().get_array();
 
-                            //遍历对象的所有属性
-                            for one in result__.as_object().unwrap().iter() {
-                                println!("key:{:?},value:{:?}", one.0, one.1.is_array());
-                                let key: String<40> = one.0.iter().collect();
-                                if key.eq("location") {
-                                    let mut temp = Location::default();
+            for result__ in temp_array.unwrap().iter() {
+                if let Some(location_obj)  = result__.get("location"){
+                    let mut temp = Location::default();
 
-                                    for one in one.1.as_object().unwrap().iter() {
-                                        let key: String<40> = one.0.iter().collect();
-                                        if key.eq("id") {
-                                            temp.id = one.1.as_string().unwrap().iter().collect();
-                                        }
-                                        if key.eq("name") {
-                                            temp.name = one.1.as_string().unwrap().iter().collect();
-                                        }
-                                        if key.eq("country") {
-                                            temp.country = one.1.as_string().unwrap().iter().collect();
-                                        }
-                                        if key.eq("path") {
-                                            temp.path = one.1.as_string().unwrap().iter().collect();
-                                        }
-                                        if key.eq("timezone") {
-                                            temp.timezone = one.1.as_string().unwrap().iter().collect();
-                                        }
-                                        if key.eq("timezone_offset") {
-                                            temp.timezone_offset = one.1.as_string().unwrap().iter().collect();
-                                        }
-                                    }
-                                    location = Some(temp);
-                                }
-
-                                if key.eq("daily") {
-                                    for one_daily in one.1.as_array().unwrap() {
-                                        let mut temp = Daily::default();
-                                        for one_daily_ in one_daily.as_object().unwrap().iter() {
-                                            let key: String<40> = one_daily_.0.iter().collect();
-                                            set_field!(temp,one_daily_,key
+                    for one in location_obj.get_object().unwrap().iter() {
+                        let key: String<40> =  one.0.chars().collect();
+                        set_field!(temp,one,key
+                                            ,"id"=>id
+                                            ,"name"=>name
+                                            ,"country"=>country
+                                            ,"path"=>path
+                                            ,"timezone"=>timezone
+                                            ,"timezone_offset"=>timezone_offset
+                                        );
+                    }
+                    location = Some(temp);
+                }
+                if let Some(daily_array)  = result__.get("daily"){
+                    for one_daily in daily_array.get_array().unwrap().iter() {
+                        let mut temp = Daily::default();
+                        for one_daily_ in one_daily.get_object().unwrap().iter() {
+                            let key: String<40> = one_daily_.0.chars().collect();
+                            set_field!(temp,one_daily_,key
                                             ,"date"=>date
                                             ,"text_day"=>text_day
                                             ,"code_day"=>code_day
@@ -118,18 +100,13 @@ pub fn form_json(str:&[u8])->Option<DailyResponse>{
                                             ,"wind_scale"=>wind_scale
                                             ,"humidity"=>humidity
                                         );
-                                        }
-
-                                        daily.push(temp);
-                                    }
-                                }
-
-                                if key.eq("last_update") {
-                                    lastUpdate = one.1.as_string().unwrap().iter().collect();
-                                }
-                            }
                         }
+
+                        daily.push(temp);
                     }
+                }
+                if let Some(last_update_temp)  = result__.get("last_update"){
+                    last_update = last_update_temp.get_string().unwrap().chars().collect();
                 }
             }
 
@@ -137,7 +114,7 @@ pub fn form_json(str:&[u8])->Option<DailyResponse>{
             if let Some(v) = location {
                 results.location = v;
                 results.daily = daily;
-                results.last_update = lastUpdate;
+                results.last_update = last_update;
 
                 let mut vec:Vec<DailyResult,1> = Vec::new();
                 vec.push(results);

@@ -24,6 +24,7 @@ use crate::event::EventType;
 use crate::model::seniverse::{DailyResult, form_json};
 use crate::pages::Page;
 use crate::request::RequestClient;
+use crate::weather::{get_weather, WEATHER_SYNC_SUCCESS};
 use crate::wifi::{finish_wifi, use_wifi};
 use crate::worldtime::{CLOCK_SYNC_SUCCESS, get_clock};
 
@@ -38,42 +39,6 @@ pub struct WeatherPage{
 
 
 impl WeatherPage{
-    async fn request(&mut self){
-        self.loading = true;
-        self.error = None;
-        let stack = use_wifi().await;
-        if let Ok(v) = stack {
-            println!("请求 stack 成功");
-            let mut request = RequestClient::new(v).await;
-            println!("开始请求成功");
-            let result = request.send_request("http://api.seniverse.com/v3/weather/daily.json?key=SvRIiZPU5oGiqcHc1&location=wuhan&language=en&unit=c&start=0&days=5").await;
-            match result {
-                Ok(response) => {
-                    finish_wifi().await;
-                    self.loading = false;
-                    self.error = None;
-                    let mut daily_result = form_json(&response.data[..response.length]);
-                    if let Some(mut v) =  daily_result {
-                        self.weather_data = v.results.pop();
-                    }
-                    println!("请求成功{}", core::str::from_utf8(& response.data[..response.length]).unwrap());
-                }
-                Err(e) => {
-                    finish_wifi().await;
-                    self.loading = false;
-                    self.error = Some("请求失败".to_string());
-                    println!("请求失败{:?}",e);
-                }
-            }
-            println!("get stack ok" );
-        }else{
-            self.loading = false;
-            self.error = Some("请求失败".to_string());
-            println!("get stack err" );
-        }
-        println!("get stack" );
-    }
-
     fn draw_clock<D>(display: &mut D, time: &str) -> Result<(), D::Error>
         where
             D: DrawTarget<Color = TwoBitColor>,
@@ -123,18 +88,11 @@ impl Page for  WeatherPage{
                 let style =
                     U8g2TextStyle::new(fonts::u8g2_font_wqy12_t_gb2312b, TwoBitColor::Black);
 
-                let display_area = display.bounding_box();
 
-                let position = display_area.center();
-                if self.loading {
-                    let _ = Text::new("加载中。。。", Point::new(0,50), style.clone()).draw(display);
-                }else{
+                if *WEATHER_SYNC_SUCCESS.lock().await {
+                    if let Some(weather) = get_weather() {
 
-                    if let Some(e) =  &self.error {
-                        let _ = Text::new(format!("加载失败,{}",e).as_str(), Point::new(0,50), style.clone()).draw(display);
-                    }else{
-
-                        if let Some(weather) = &self.weather_data {
+                        if let Some(weather) = weather.daily_result.lock().await.as_mut() {
 
                             let mut y = 10;
                             for one in weather.daily.iter() {
@@ -152,7 +110,6 @@ impl Page for  WeatherPage{
                     }
 
                 }
-
                 if *CLOCK_SYNC_SUCCESS.lock().await {
                     if let Some(clock) = get_clock() {
                         let local = clock.local().await;
@@ -205,7 +162,7 @@ impl Page for  WeatherPage{
     async fn run(&mut self, spawner: Spawner) {
         self.running = true;
         if let None = self.weather_data{
-            self.request().await;
+            //self.request().await;
         }
         loop {
 
@@ -223,8 +180,9 @@ impl Page for  WeatherPage{
         event::clear().await;
         event::on_target(EventType::KeyShort(1), Self::mut_to_ptr(self), move |ptr| {
             return Box::pin(async move {
-                let mut_ref: &mut Self = Self::mut_by_ptr(ptr.clone()).unwrap();
-                mut_ref.request().await;
+                if let Some(weather) = get_weather() {
+                    weather.request().await.unwrap();
+                }
             });
         }).await;
         event::on_target(EventType::KeyShort(5),Self::mut_to_ptr(self),  move |ptr|  {

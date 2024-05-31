@@ -23,7 +23,7 @@ use embedded_layout::layout::linear::LinearLayout;
 use embedded_layout::object_chain::Chain;
 use esp_println::println;
 use lcd_drivers::color::TwoBitColor;
-use lite_json::{JsonValue, parse_json};
+
 
 use u8g2_fonts::U8g2TextStyle;
 use u8g2_fonts::fonts;

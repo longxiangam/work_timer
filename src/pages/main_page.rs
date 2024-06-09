@@ -33,6 +33,7 @@ use crate::display::{display_mut, draw_text_2, RENDER_CHANNEL, RenderInfo};
 use crate::event::EventType;
 use crate::pages::clock_page::{ClockPage};
 use crate::pages::{MenuItem, Page, PageEnum};
+use crate::pages::calender_page::CalenderPage;
 use crate::pages::games_page::GamesPage;
 use crate::pages::PageEnum::{ECalenderPage, EChip8Page, EClockPage, ETimerPage, EWeatherPage};
 use crate::pages::timer_page::TimerPage;
@@ -257,6 +258,9 @@ impl Page for  MainPage{
                     self.back().await;
                 }
                 ECalenderPage => {
+                    let mut calender_page = CalenderPage::new();
+                    calender_page.bind_event().await;
+                    calender_page.run(spawner).await;
                     self.back().await;
                 }
                 EChip8Page => {

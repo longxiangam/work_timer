@@ -15,6 +15,7 @@ mod clock_page;
 mod games_page;
 mod timer_page;
 mod weather_page;
+mod calender_page;
 
 
 enum PageEnum {
@@ -42,7 +43,7 @@ impl MenuItem{
 
 pub trait Page {
     fn new() ->Self;
-    fn render(&mut self) -> impl Future<Output=()> +Send +Sync;
+    async fn render(&mut self);
    /* fn run(&mut self)-> impl Future<Output=()> +Send +Sync;*/
     async fn  run(&mut self,spawner: Spawner);
     async fn bind_event(&mut self);

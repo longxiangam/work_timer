@@ -1,5 +1,5 @@
 use core::num::ParseIntError;
-use embassy_net::{IpAddress, Ipv4Address, Stack};
+use embassy_net::{IpAddress,  Stack};
 use embassy_net::dns::DnsQueryType;
 use embassy_net::tcp::{ConnectError, TcpSocket};
 use embedded_tls::{Aes128GcmSha256, NoVerify, TlsConfig, TlsConnection, TlsContext, TlsError};

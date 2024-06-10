@@ -1,5 +1,4 @@
-use alloc::string::ToString;
-use core::ops::DerefMut;
+
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use esp_println::println;
@@ -7,7 +6,7 @@ use static_cell::make_static;
 use crate::model::seniverse::{DailyResult, form_json};
 use crate::request::RequestClient;
 use crate::wifi::{finish_wifi, use_wifi};
-use crate::worldtime::{Clock, ntp_request};
+
 
 
 pub struct Weather{

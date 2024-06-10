@@ -6,9 +6,7 @@
 
 //! Random numbers generator
 
-use core::cell::RefCell;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::mutex::Mutex;
+
 use rand_core::{CryptoRng, Error, RngCore};
 
 use hal::Rng;

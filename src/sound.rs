@@ -5,13 +5,12 @@ use embedded_hal::delay::DelayNs;
 use embassy_time::Timer;
 use esp_println::println;
 use hal::clock::Clocks;
-use hal::dma::DmaDescriptor;
 use hal::gpio::{Gpio12, GpioPin, Output, PushPull};
 use hal::ledc::channel::Channel;
 use hal::ledc::{channel, LEDC, LowSpeed, LSGlobalClkSource, timer};
 use hal::peripherals;
 use hal::prelude::{_esp_hal_ledc_channel_ChannelHW, _esp_hal_ledc_channel_ChannelIFace, _esp_hal_ledc_timer_TimerIFace, _fugit_RateExtU32};
-use static_cell::{make_static, StaticCell};
+use static_cell::{make_static, };
 use wavv::{Samples, Wave};
 
 const BYTES: &'static [u8] = include_bytes!("../files/sing8bit.wav");

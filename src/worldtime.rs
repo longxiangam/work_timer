@@ -17,7 +17,6 @@ use esp_wifi::wifi::{WifiDevice, WifiStaDevice};
 use sntpc::{async_impl::{get_time,NtpUdpSocket }, NtpContext, NtpTimestampGenerator };
 use static_cell::make_static;
 use time::{Duration, OffsetDateTime, UtcOffset, Weekday};
-use time::macros::offset;
 use crate::wifi::{finish_wifi, use_wifi};
 
 

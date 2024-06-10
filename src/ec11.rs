@@ -1,19 +1,13 @@
-use core::convert::Infallible;
+
 use embassy_futures::select::{Either, select};
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_time::{Delay, Duration, Instant, Timer};
-use embedded_hal::delay::DelayNs;
+use embassy_time::{Instant};
 
 use embedded_hal_async::digital::Wait;
-use esp_println::{print, println};
-use hal::gpio::{AnyPin, Gpio0, Gpio1, Gpio13, Input, InputPin, PullUp};
+use esp_println::{ println};
+use hal::gpio::{ Gpio0, Gpio1, Gpio13, Input,  PullUp};
 use hal::prelude::_embedded_hal_digital_v2_InputPin;
-use embassy_sync::channel::{Channel, Receiver, Sender};
 
-use embedded_hal::digital::InputPin as OtherInputPin;
-use esp_wifi::wifi::is_from_isr;
-use crate::display;
-use crate::display::{display_mut, RenderInfo};
+
 use crate::ec11::WheelDirection::{BACK, FRONT, NO_STATE};
 use crate::event::{EventType, key_detection, toggle_event};
 

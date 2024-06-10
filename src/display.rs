@@ -19,11 +19,8 @@ use embedded_hal::digital::OutputPin;
 use lcd_drivers::color::TwoBitColor;
 use lcd_drivers::uc1638::prelude::Display2in7;
 use embedded_graphics::{Drawable, Pixel};
-use embedded_graphics::prelude::Size;
-use embedded_graphics::primitives::Rectangle;
 
-use esp_println::{print, println};
-use lcd_drivers::graphics::TwoBitColorDisplay;
+use lcd_drivers::graphics::TwoBitColorDisplay as _;
 
 pub struct RenderInfo{
     pub time:i32

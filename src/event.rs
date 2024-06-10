@@ -4,9 +4,8 @@ use heapless::Vec;
 
 use core::future::Future;
 use core::pin::Pin;
-use embassy_futures::select::{Either, Either4, select, Select, select4};
+use embassy_futures::select::{ Either4, select4};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::channel::Channel;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Instant, Timer};
 use embedded_hal::digital::InputPin;
@@ -14,7 +13,6 @@ use embedded_hal_async::digital::Wait;
 use esp_println::println;
 use futures::FutureExt;
 use hal::gpio::{Gpio11, Gpio5, Gpio8, Gpio9, Input, PullUp};
-use hal::prelude::_embedded_hal_digital_v2_InputPin;
 
 use crate::pages::Page;
 

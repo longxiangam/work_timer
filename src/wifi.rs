@@ -1,7 +1,5 @@
-use alloc::string::String;
+
 use core::cell::RefCell;
-use core::convert::Infallible;
-use core::ops::DerefMut;
 use embassy_executor::Spawner;
 use embassy_futures::select::{Either, select};
 use embassy_net::{Config, Stack, StackResources};
@@ -12,15 +10,11 @@ use embassy_time::{Duration, Instant, Timer};
 use esp_println::println;
 use esp_wifi::{EspWifiInitFor, initialize};
 use esp_wifi::wifi::{AuthMethod, ClientConfiguration, Configuration, WifiController, WifiDevice, WifiEvent, WifiStaDevice, WifiState};
-use esp_wifi::wifi::WifiState::{StaStarted, StaStopped};
 use hal::{embassy, Rng};
 use hal::clock::Clocks;
 use hal::peripherals::{SYSTIMER, WIFI};
 use hal::system::RadioClockControl;
-use hal::timer::TimerGroup;
-use log::{debug, info};
 use static_cell::{make_static, StaticCell};
-use crate::wifi::WifiNetError::WaitConnecting;
 
 #[derive(Eq, PartialEq)]
 enum WifiNetState {

@@ -17,7 +17,7 @@ use hal::system::RadioClockControl;
 use static_cell::{make_static, StaticCell};
 
 #[derive(Eq, PartialEq)]
-enum WifiNetState {
+pub enum WifiNetState {
     WifiConnecting,
     WifiConnected,
     WifiDisconnected,

@@ -1,18 +1,13 @@
-use alloc::{format, vec};
+
 use heapless::{String};
 use heapless::Vec;
 use core::marker::PhantomData;
-use core::ops::Add;
 use core::str::FromStr;
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::Drawable;
 use embedded_graphics::prelude::{PixelColor, Point, Primitive, Size};
 use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle, StrokeAlignment};
-use embedded_graphics::text::renderer::CharacterStyle;
-use embedded_graphics::text::{Baseline, Text, TextStyleBuilder};
-use esp_println::println;
-use lcd_drivers::color::TwoBitColor;
-use u8g2_fonts::{FontRenderer, U8g2TextStyle};
+use u8g2_fonts::{FontRenderer};
 use u8g2_fonts::fonts;
 use u8g2_fonts::types::{FontColor, HorizontalAlignment, VerticalPosition};
 use crate::widgets::scroll_bar::{ScrollBar, ScrollBarDirection};
@@ -38,7 +33,7 @@ impl <C: Clone> ListWidget<C>{
         for (index,item) in items.iter().enumerate() {
             let item_position =  Point::new(position.x,position.y + (index) as i32 * ITEM_HEIGHT as i32 );
             let list_item = ListItemWidget::new(item_position,front_color.clone(),back_color.clone(),item_size,String::from_str(item).unwrap());
-            list_items.push(list_item);
+            let _ = list_items.push(list_item);
         }
         Self{
             position ,
@@ -129,12 +124,12 @@ impl <C> Drawable for  ListWidget<C> where C:PixelColor{
             .stroke_color(self.front_color)
             .stroke_alignment(StrokeAlignment::Inside)
             .stroke_width(1).build();
-        let rectangle = Rectangle::new(self.position,self.size)
+        let _rectangle = Rectangle::new(self.position,self.size)
             .into_styled(line_style)
             .draw(target);
 
         for item in self.items.iter() {
-            item.draw(target);
+            let _ = item.draw(target);
         }
 
         let position = Point::new( self.position.x + (self.size.width - SCROLL_WIDTH ) as i32,self.position.y);
@@ -145,7 +140,7 @@ impl <C> Drawable for  ListWidget<C> where C:PixelColor{
                                         , ScrollBarDirection::Vertical
                 ,self.front_color,self.back_color
         );
-        scroll_bar.draw(target);
+        let _ = scroll_bar.draw(target);
 
         Ok(())
     }
@@ -197,7 +192,7 @@ impl <C> Drawable for  ListItemWidget<C>  where C:PixelColor{
                 .stroke_alignment(StrokeAlignment::Inside)
                 .fill_color(self.front_color)
                 .stroke_width(1).build();
-            let rectangle = Rectangle::new(self.position,self.size)
+            let _rectangle = Rectangle::new(self.position,self.size)
                 .into_styled(line_style)
                 .draw(target);
 

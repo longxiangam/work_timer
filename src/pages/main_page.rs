@@ -1,35 +1,24 @@
 use alloc::boxed::Box;
-use alloc::fmt::format;
 use heapless::String;
 use heapless::Vec;
 use core::cell::RefCell;
-use core::convert::Infallible;
 use core::str::FromStr;
 use embassy_executor::Spawner;
-use embassy_futures::select::{Either, select, Select};
+use embassy_futures::select::{Either, select, };
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::channel::{Channel, ReceiveFuture};
+use embassy_sync::channel::{Channel, };
 use embassy_sync::mutex::Mutex;
-use embassy_time::{Duration, Instant, Timer};
+use embassy_time::{Duration,  Timer};
 use embedded_graphics::Drawable;
 use embedded_graphics::geometry::Dimensions;
-use embedded_graphics::mono_font::MonoTextStyleBuilder;
-use embedded_graphics::prelude::{DrawTarget, Point, Primitive, Size};
-use embedded_graphics::primitives::{Line, PrimitiveStyleBuilder, Rectangle, StrokeAlignment, StyledDrawable};
-use embedded_graphics::text::Text;
-use embedded_io_async::Write;
-use embedded_layout::align::{Align, horizontal, vertical};
-use embedded_layout::layout::linear::{FixedMargin, LinearLayout};
-use embedded_layout::layout::linear::spacing::DistributeFill;
-use embedded_layout::object_chain::Chain;
+
+use embedded_graphics::prelude::{DrawTarget, Point, };
+
 use esp_println::println;
 use lcd_drivers::color::TwoBitColor;
-use static_cell::make_static;
-use u8g2_fonts::U8g2TextStyle;
-use u8g2_fonts::fonts;
 
-use crate::{display, event};
-use crate::display::{display_mut, draw_text_2, RENDER_CHANNEL, RenderInfo};
+use crate::{ event};
+use crate::display::{display_mut,  RENDER_CHANNEL, RenderInfo};
 use crate::event::EventType;
 use crate::pages::clock_page::{ClockPage};
 use crate::pages::{MenuItem, Page, PageEnum};
@@ -232,8 +221,8 @@ impl Page for  MainPage{
                 continue;
             }
             let current_page = self.current_page.unwrap();
-            let menuItem = &self.menus.as_mut().unwrap()[current_page as usize];
-            match menuItem.page_enum {
+            let menu_item = &self.menus.as_mut().unwrap()[current_page as usize];
+            match menu_item.page_enum {
                 PageEnum::EMainPage => {
 
                 }

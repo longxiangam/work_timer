@@ -1,8 +1,6 @@
-use core::fmt::Debug;
-use core::ops::Add;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
-use embassy_time::{Delay, Duration, Instant, Timer};
+use embassy_time::{Delay, Duration,  Timer};
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::geometry::Point;
 use embedded_graphics::mono_font::MonoTextStyleBuilder;
@@ -10,15 +8,14 @@ use embedded_graphics::text::{Baseline, Text, TextStyleBuilder};
 use embedded_hal_bus::spi::ExclusiveDevice;
 
 use hal::dma::Channel0;
-use hal::gpio::{Gpio10, Gpio11, Gpio19, Gpio2, Gpio3, Gpio6, Gpio7, Gpio9, Output, Pin, PushPull};
+use hal::gpio::{Gpio10,   Gpio2, Gpio3,    Output,  PushPull};
 use hal::peripherals::SPI2;
 use hal::spi::master::dma::SpiDma;
 use lcd_drivers::prelude::Lcd2in7;
 use lcd_drivers::prelude::WaveshareDisplay;
-use embedded_hal::digital::OutputPin;
 use lcd_drivers::color::TwoBitColor;
 use lcd_drivers::uc1638::prelude::Display2in7;
-use embedded_graphics::{Drawable, Pixel};
+use embedded_graphics::{Drawable };
 
 use lcd_drivers::graphics::TwoBitColorDisplay as _;
 
@@ -50,7 +47,7 @@ pub async  fn render(mut spi:  SpiDma<'static,SPI2, Channel0, hal::spi::FullDupl
     loop {
 
 
-        let renderInfo = receiver.receive().await;
+        let render_info = receiver.receive().await;
 
         let buffer = unsafe { DISPLAY.as_mut().unwrap().buffer() };
         let len = buffer.len();

@@ -35,11 +35,11 @@ pub struct PwmPlayer<'a,GPIO: hal::gpio::OutputPin>{
 
 impl <'a,GPIO: hal::gpio::OutputPin> PwmPlayer<'a,GPIO> {
     fn init(ledc: peripherals::LEDC, clocks: &'static Clocks<'static>, sound_io:Gpio12<Output<PushPull>>) -> PwmPlayer<'a, GpioPin<Output<PushPull>, 12>> {
-        let mut ledc:&mut LEDC<'static>  = make_static!(LEDC::new(ledc, clocks));
+        let ledc:&mut LEDC<'static>  = make_static!(LEDC::new(ledc, clocks));
 
         ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
 
-        let mut lstimer0 =  make_static!(ledc.get_timer::<LowSpeed>(timer::Number::Timer0));
+        let lstimer0 =  make_static!(ledc.get_timer::<LowSpeed>(timer::Number::Timer0));
 
         lstimer0
             .configure(timer::config::Config {

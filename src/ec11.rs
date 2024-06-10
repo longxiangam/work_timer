@@ -8,14 +8,14 @@ use hal::gpio::{ Gpio0, Gpio1, Gpio13, Input,  PullUp};
 use hal::prelude::_embedded_hal_digital_v2_InputPin;
 
 
-use crate::ec11::WheelDirection::{BACK, FRONT, NO_STATE};
+use crate::ec11::WheelDirection::{Back, Front, NoState};
 use crate::event::{EventType, key_detection, toggle_event};
 
 #[derive(Eq, PartialEq)]
 enum WheelDirection{
-    FRONT,
-    BACK,
-    NO_STATE,
+    Front,
+    Back,
+    NoState,
 }
 const SAMPLE_TIMES:u32 = 10;
 const JUDGE_TIMES:u32 = 8;
@@ -24,8 +24,7 @@ const JUDGE_TIMES:u32 = 8;
 pub async fn task(mut a_point :Gpio1<Input<PullUp>>,mut b_point :Gpio0<Input<PullUp>>,mut push_key:Gpio13<Input<PullUp>>){
     // 初始化编码器状态
 
-    let mut begin_state = WheelDirection::NO_STATE;
-    let mainPageSender =  crate::pages::main_page::MAIN_PAGE_CHANNEL.sender();
+    let mut begin_state = NoState;
 
     // 开始监听编码器状态变化
     loop {
@@ -38,7 +37,7 @@ pub async fn task(mut a_point :Gpio1<Input<PullUp>>,mut b_point :Gpio0<Input<Pul
 
                 let mut a_is_low_times = 0;
                 let mut b_is_low_times = 0;
-                for i in 0..SAMPLE_TIMES {
+                for _i in 0..SAMPLE_TIMES {
                     if a_point.is_low().unwrap() {
                         a_is_low_times += 1;
                     }
@@ -49,7 +48,7 @@ pub async fn task(mut a_point :Gpio1<Input<PullUp>>,mut b_point :Gpio0<Input<Pul
 
                 let mut a_is_down = false;
                 let mut b_is_down = false;
-                if(a_is_low_times > JUDGE_TIMES){
+                if a_is_low_times > JUDGE_TIMES {
                     a_is_down = true;
                 }else if a_is_low_times < SAMPLE_TIMES - JUDGE_TIMES {
                     a_is_down = false;
@@ -64,28 +63,28 @@ pub async fn task(mut a_point :Gpio1<Input<PullUp>>,mut b_point :Gpio0<Input<Pul
                     continue;
                 }
                 //下降沿开始
-                if(a_is_down){
-                    if(b_is_down){
-                        begin_state = FRONT;
+                if a_is_down {
+                    if b_is_down {
+                        begin_state = Front;
                         continue;
-                    }else if(!b_is_down){
-                        begin_state =  BACK;
+                    }else if !b_is_down {
+                        begin_state = Back;
                         continue;
                     }
-                    begin_state = NO_STATE;
+                    begin_state = NoState;
 
                 }else{
                     //上升沿判断结束
-                    if(!b_is_down){
-                        if begin_state == FRONT  {
+                    if !b_is_down {
+                        if begin_state == Front {
                             toggle_event(EventType::WheelFront,Instant::now().as_millis()).await;
                         }
-                    }else if(b_is_down){
-                        if begin_state == BACK {
+                    }else if b_is_down {
+                        if begin_state == Back {
                             toggle_event(EventType::WheelBack,Instant::now().as_millis()).await;
                         }
                     }
-                    begin_state = NO_STATE;
+                    begin_state = NoState;
                 }
 
 
@@ -126,14 +125,14 @@ AL a 低   AH  a 高   BL b 低  BH b 高
                  num = num + 1;
                  println!("正转");
                  println!("num :{}", num);
-                 return Some( WheelDirection::FRONT);
+                 return Some( WheelDirection::Front);
              } else if !current_a_state.unwrap() && current_b_state.unwrap() {
                  // 反转
                  num = num - 1;
                  println!("反转");
                  println!("num :{}", num);
 
-                 return Some( WheelDirection::BACK);
+                 return Some( WheelDirection::Back);
              }
          }
          // 更新状态

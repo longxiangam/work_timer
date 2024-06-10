@@ -87,7 +87,7 @@ impl <C> Drawable for Calender<C> where C:PixelColor {
             Text::with_text_style(&day.to_string(), Point::new(x, y), style.clone(), text_style)
                 .draw(display)?;
             if same_month && day == today_day {
-                let rectangle = Rectangle::new(Point::new(x-3,y+3),Size::new(16,12))
+                let _rectangle = Rectangle::new(Point::new(x-3,y+3),Size::new(16,12))
                     .into_styled(line_style)
                     .draw(display);
             }

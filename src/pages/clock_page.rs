@@ -1,26 +1,17 @@
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
-use core::cell::RefCell;
+
 use core::fmt::Debug;
-use core::future::Future;
-use core::str::from_utf8;
 use eg_seven_segment::SevenSegmentStyleBuilder;
 use embassy_executor::Spawner;
-use embassy_futures::select::{Either, select};
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::channel::Channel;
-use embassy_sync::mutex::Mutex;
-use embassy_time::{Duration, Instant, Timer};
+use embassy_time::{Duration,  Timer};
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::Drawable;
 use embedded_graphics::geometry::Point;
 use embedded_graphics::mono_font::MonoTextStyleBuilder;
 use embedded_graphics::prelude::{Dimensions, Size};
 use embedded_graphics::text::{Alignment, Baseline, Text, TextStyleBuilder};
-use embedded_layout::align::{Align, horizontal, vertical};
-use embedded_layout::layout::linear::LinearLayout;
-use embedded_layout::object_chain::Chain;
 use esp_println::println;
 use lcd_drivers::color::TwoBitColor;
 

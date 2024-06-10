@@ -42,7 +42,7 @@ impl Chip8{
     }
 
     pub fn run(&mut self){
-        for  i in 0..30 {
+        for _i in 0..30 {
             self.execute_cycle();
         }
         self.decrement_timers();

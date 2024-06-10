@@ -3,8 +3,6 @@ use embedded_graphics::Drawable;
 use embedded_graphics::pixelcolor::PixelColor;
 use embedded_graphics::prelude::{Point, Primitive, Size};
 use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle, StrokeAlignment};
-use esp_println::{print, println};
-use futures::future::ok;
 use crate::widgets::scroll_bar::ScrollBarDirection::Horizontal;
 
 #[derive(Eq, PartialEq)]
@@ -84,12 +82,12 @@ impl <C> Drawable for ScrollBar<C> where C:PixelColor{
         let fill_style = PrimitiveStyleBuilder::new()
             .fill_color(self.front_color)
             .build();
-        let rectangle = Rectangle::new(self.position,self.size)
+        let _rectangle = Rectangle::new(self.position,self.size)
             .into_styled(line_style)
             .draw(target);
 
         let rectangle = self.bar_rectangle();
-        let rectangle_inner = rectangle
+        let _rectangle_inner = rectangle
             .into_styled(fill_style)
             .draw(target);
 

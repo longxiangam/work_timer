@@ -1,13 +1,6 @@
 use heapless::String;
-use core::cell::RefCell;
-use core::future::Future;
 use embassy_executor::Spawner;
-use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
-use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Timer};
-use esp_println::println;
-use static_cell::make_static;
-use crate::pages::clock_page::ClockPage;
 use crate::pages::main_page::MainPage;
 
 pub mod main_page;
@@ -44,7 +37,7 @@ impl MenuItem{
 pub trait Page {
     fn new() ->Self;
     async fn render(&mut self);
-   /* fn run(&mut self)-> impl Future<Output=()> +Send +Sync;*/
+
     async fn  run(&mut self,spawner: Spawner);
     async fn bind_event(&mut self);
 
@@ -59,9 +52,7 @@ pub trait Page {
     }
 
     fn mut_to_ptr<T>(ref_mut:&mut T)->usize{
-        unsafe {
-            ref_mut as *mut T as usize
-        }
+          ref_mut as *mut T as usize
     }
 }
 

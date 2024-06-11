@@ -9,6 +9,7 @@ mod games_page;
 mod timer_page;
 mod weather_page;
 mod calender_page;
+mod qrcode_page;
 
 
 enum PageEnum {
@@ -18,6 +19,7 @@ enum PageEnum {
     EWeatherPage,
     ECalenderPage,
     EChip8Page,
+    EQrcodePage,
 
 }
 struct  MenuItem{

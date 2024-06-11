@@ -24,7 +24,8 @@ use crate::pages::clock_page::{ClockPage};
 use crate::pages::{MenuItem, Page, PageEnum};
 use crate::pages::calender_page::CalenderPage;
 use crate::pages::games_page::GamesPage;
-use crate::pages::PageEnum::{ECalenderPage, EChip8Page, EClockPage, ETimerPage, EWeatherPage};
+use crate::pages::PageEnum::{ECalenderPage, EChip8Page, EClockPage, EQrcodePage, ETimerPage, EWeatherPage};
+use crate::pages::qrcode_page::{ QrcodePage};
 use crate::pages::timer_page::TimerPage;
 use crate::pages::weather_page::WeatherPage;
 use crate::widgets::list_widget::ListWidget;
@@ -98,6 +99,7 @@ impl Page for  MainPage{
         menus.push(MenuItem::new(String::<20>::from_str("天气").unwrap(), EWeatherPage));
         menus.push(MenuItem::new(String::<20>::from_str("日历").unwrap(), ECalenderPage));
         menus.push(MenuItem::new(String::<20>::from_str("游戏").unwrap(), EChip8Page));
+        menus.push(MenuItem::new(String::<20>::from_str("二维码").unwrap(), EQrcodePage));
 
        /*     MenuItem::new(String::from_str("时钟"), EClockPage),
             MenuItem::new("定时器".to_string(), ETimerPage),
@@ -260,8 +262,13 @@ impl Page for  MainPage{
                     //切换到主页并绑定事件
                     self.back().await;
                 }
-
-
+                PageEnum::EQrcodePage =>{
+                    let mut qrcode_page = QrcodePage::new();
+                    qrcode_page.bind_event().await;
+                    qrcode_page.run(spawner).await;
+                    self.back().await;
+                }
+                _ => { self.back().await;}
             }
 
             Timer::after(Duration::from_millis(50)).await;

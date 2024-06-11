@@ -104,7 +104,13 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
     let timer_group0 = TimerGroup::new(peripherals.TIMG0, &clocks);
     embassy::init(&clocks, timer_group0);
 
+/*    println!("进入main");
+    //测试软件重启位
+    unsafe {
+        peripherals.LPWR.options0().modify(|_, w| w.sw_sys_rst().set_bit());
+    }*/
 
+    println!("do main");
     //spi
     let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
 
@@ -194,6 +200,7 @@ pub fn enter_deep(rtc_cntl: LPWR, mut delay: hal::Delay, interval: core::time::D
     let wakeup_source = TimerWakeupSource::new(interval);
 
     let mut rtc = Rtc::new(rtc_cntl);
+
 
     info!("Entering deep sleep for {interval:?}");
     rtc.sleep_deep(&[&wakeup_source], &mut delay);

@@ -1,6 +1,7 @@
 
 use core::cell::RefCell;
 use core::net::Ipv4Addr;
+use core::str::FromStr;
 use dhcparse::dhcpv4::{Addr, DhcpOption, Encode, Encoder, Message};
 use dhcparse::v4_options;
 use embassy_executor::Spawner;
@@ -56,8 +57,6 @@ pub static mut STACK_MUT: Option<&'static Stack<WifiDevice<'static, WifiStaDevic
 pub static mut AP_STACK_MUT: Option<&'static Stack<WifiDevice<'static, WifiApDevice>>>  =  None;
 pub static AP_DHCP_FINISH_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 pub static HAL_RNG:Mutex<CriticalSectionRawMutex,Option<Rng>>  =  Mutex::new(None);
-struct WifiInstance{
-}
 
 pub async fn connect_wifi(spawner: &Spawner,
                           systimer: SYSTIMER,
@@ -167,7 +166,7 @@ pub async fn connect_wifi(spawner: &Spawner,
     }
     Ok(stack)
 }
-#[cfg(feature = "wifi_ap")]
+
 #[embassy_executor::task]
 async fn ap_task(stack: &'static Stack<WifiDevice<'static, WifiApDevice>>) {
     stack.run().await
@@ -613,6 +612,8 @@ async fn web_service(){
                         if to_print.contains("\r\n\r\n") {
                             print!("{}", to_print);
                             println!();
+
+                            process_http(&mut socket,to_print).await;
                             break;
                         }
 
@@ -623,21 +624,6 @@ async fn web_service(){
                         break;
                     }
                 };
-            }
-
-            let r = socket
-                .write_all(
-                    b"HTTP/1.0 200 OK\r\n\r\n\
-            <html>\
-                <body>\
-                    <h1>Hello Rust! Hello esp-wifi!</h1>\
-                </body>\
-            </html>\r\n\
-            ",
-                )
-                .await;
-            if let Err(e) = r {
-                println!("write error: {:?}", e);
             }
 
             let r = socket.flush().await;
@@ -652,4 +638,80 @@ async fn web_service(){
             socket.abort();
         }
     }
+}
+
+async fn process_http(socket:&mut TcpSocket<'_>,buffer:&str){
+    use embedded_io_async::Write;
+    use heapless::String;
+
+    let mut headers = [httparse::EMPTY_HEADER; 64];
+    let mut req = httparse::Request::new(&mut headers);
+    req.parse(buffer.as_ref());
+    println!("request:{:?}",req);
+    if let Some("GET") = req.method {
+        if let Some("/") = req.path {
+            let r = socket
+                .write_all(
+                    b"HTTP/1.0 200 OK\r\n\r\n\
+            <html>\
+                <body>\
+                   <form action='/configure' method='POST'>\
+                    <label for='ssid'>SSID:</label>\
+                    <input type='text' id='ssid' name='ssid' />\
+                    <br/>\
+                    <label for='password'>Password:</label>\
+                    <input type='password' id='password' name='password' />\
+                    <br/>\
+                    <input type='submit' value='Configure' />\
+                   </form>\
+                </body>\
+            </html>\r\n",
+                )
+                .await;
+
+            if let Err(e) = r {
+                println!("write error: {:?}", e);
+            }
+        }
+    }
+    if let Some("POST") = req.method {
+        if let Some("/configure") = req.path {
+            let parts:heapless::Vec<&str,10> = buffer.split("\r\n\r\n").collect();
+            if parts.len() > 1 {
+
+                println!("body:{:?}",parts[1]);
+
+                let form_fields:Vec<&str,10> = parts[1].split("&").collect();
+                for form_field in form_fields {
+                    let field:Vec<&str,2> = form_field.split("=").collect();
+                    if field[0] == "ssid" {
+                        println!("ssid:{}",field[1]);
+                    }else if field[0] == "password" {
+                        println!("password:{}",field[1]);
+                    }
+                }
+                let r = socket
+                    .write_all(
+                        b"HTTP/1.0 200 OK\r\n\r\n\
+            <html>\
+                <body>\
+                   <form action='/restart' method='POST'>\
+                    <br/>\
+                    <br/>\
+                    <input type='submit' value='' />\
+                   </form>\
+                </body>\
+            </html>\r\n",
+                    )
+                    .await;
+
+                if let Err(e) = r {
+                    println!("write error: {:?}", e);
+                }
+            }
+
+        }
+    }
+
+
 }

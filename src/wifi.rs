@@ -1,10 +1,11 @@
 
 use core::cell::RefCell;
-use dhcparse::dhcpv4::{DhcpOption, Encode, Encoder, Message};
+use core::net::Ipv4Addr;
+use dhcparse::dhcpv4::{Addr, DhcpOption, Encode, Encoder, Message};
 use dhcparse::v4_options;
 use embassy_executor::Spawner;
 use embassy_futures::select::{Either, select};
-use embassy_net::{Config, IpEndpoint, Ipv4Address, Ipv4Cidr, Stack, StackResources, StaticConfigV4};
+use embassy_net::{Config, IpAddress, IpEndpoint, IpListenEndpoint, Ipv4Address, Ipv4Cidr, Stack, StackResources, StaticConfigV4};
 use embassy_net::tcp::TcpSocket;
 use embassy_net::udp::UdpSocket;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
@@ -14,13 +15,14 @@ use embassy_time::{Duration, Instant, Timer};
 use esp_println::{print, println};
 use esp_wifi::{EspWifiInitFor, initialize};
 use esp_wifi::wifi::{AccessPointConfiguration, AuthMethod, ClientConfiguration, Configuration, WifiApDevice, WifiController, WifiDevice, WifiEvent, WifiStaDevice, WifiState};
-use esp_wifi::wifi::ipv4::{Ipv4Addr, RouterConfiguration, SocketAddrV4};
+use esp_wifi::wifi::ipv4::{ RouterConfiguration, SocketAddrV4};
 use hal::{embassy, Rng};
 use hal::clock::Clocks;
 use hal::peripherals::{SYSTIMER, WIFI};
 use hal::system::RadioClockControl;
 use heapless::Vec;
 use static_cell::{make_static, StaticCell};
+
 
 #[derive(Eq, PartialEq)]
 pub enum WifiNetState {
@@ -52,7 +54,7 @@ pub static LAST_USE_TIME_SECS:Mutex<CriticalSectionRawMutex,RefCell<u64>>  =  Mu
 pub static WIFI_STATE:Mutex<CriticalSectionRawMutex,RefCell<WifiNetState>>  =  Mutex::new(RefCell::new(WifiNetState::WifiStopped));
 pub static mut STACK_MUT: Option<&'static Stack<WifiDevice<'static, WifiStaDevice>>>  =  None;
 pub static mut AP_STACK_MUT: Option<&'static Stack<WifiDevice<'static, WifiApDevice>>>  =  None;
-
+pub static AP_DHCP_FINISH_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 pub static HAL_RNG:Mutex<CriticalSectionRawMutex,Option<Rng>>  =  Mutex::new(None);
 struct WifiInstance{
 }
@@ -120,7 +122,7 @@ pub async fn connect_wifi(spawner: &Spawner,
         let config = make_static!(Configuration::Mixed(client_config,ap_config));
         controller.set_configuration(config);
 
-        spawner.spawn(ap_web_service()).ok();
+        spawner.spawn(dhcp_service()).ok();
 
     }
 
@@ -247,7 +249,6 @@ async fn refresh_last_time(){
 const TIME_OUT_SECS: u64 = 10;
 static WIFI_LOCK:Mutex<CriticalSectionRawMutex,bool> = Mutex::new(false);
 pub async fn use_wifi() ->Result<&'static Stack<WifiDevice<'static, WifiStaDevice>>, WifiNetError>{
-    return Err(WifiNetError::Infallible);
     let secs = Instant::now().as_secs();
 
     if *WIFI_STATE.lock().await.get_mut() != WifiNetState::WifiConnected {
@@ -313,8 +314,110 @@ async fn do_stop(){
     }
 }
 
+
+
+/// ap 模式 配网
+pub async fn start_wifi_ap(spawner: &Spawner,
+                           systimer: SYSTIMER,
+                           rng: Rng,
+                           wifi: WIFI,
+                           radio_clock_control: RadioClockControl,
+                           clocks: &Clocks<'_> )
+                           -> Result<&'static Stack<WifiDevice<'static, WifiApDevice>>, WifiNetError> {
+
+    (*HAL_RNG.lock().await).replace(rng);
+
+    let timer = hal::systimer::SystemTimer::new(systimer).alarm0;
+    let init = initialize(
+        EspWifiInitFor::Wifi,
+        timer,
+        rng,
+        radio_clock_control,
+        &clocks,
+    )
+        .unwrap();
+
+    let (wifi_ap_interface, mut controller) =
+        esp_wifi::wifi::new_with_mode(&init, wifi, WifiApDevice).unwrap();
+
+    let seed = 1234;
+    let ap_config = Config::ipv4_static(StaticConfigV4 {
+        address: Ipv4Cidr::new(Ipv4Address::new(192, 168, 2, 1), 24),
+        gateway: Some(Ipv4Address::from_bytes(&[192, 168, 2, 1])),
+        dns_servers: Default::default(),
+    });
+    let ap_stack: &Stack<WifiDevice<'static, WifiApDevice>> = &*make_static!(
+            Stack::new(
+                wifi_ap_interface,
+                ap_config,
+                make_static!( StackResources::<3>::new()),
+                seed
+            )
+        );
+
+    spawner.spawn(ap_task(&ap_stack)).ok();
+    spawner.spawn(dhcp_service()).ok();
+    spawner.spawn(connection_wifi_ap(controller)).ok();
+
+
+
+
+    loop {
+        println!("Waiting is_link_up...");
+        if ap_stack.is_link_up() {
+            break;
+        }
+        Timer::after(Duration::from_millis(1000)).await;
+    }
+
+    println!("Waiting to get IP address...");
+    loop {
+        if let Some(config) = ap_stack.config_v4() {
+            println!("Got IP: {}", config.address);
+            break;
+        }
+        Timer::after(Duration::from_millis(500)).await;
+    }
+    unsafe {
+        AP_STACK_MUT = Some(ap_stack);
+    }
+
+    AP_DHCP_FINISH_SIGNAL.wait().await;
+    AP_DHCP_FINISH_SIGNAL.reset();
+    spawner.spawn(web_service()).ok();
+
+
+    Ok(ap_stack)
+}
+
 #[embassy_executor::task]
-async fn ap_web_service(){
+async fn connection_wifi_ap(mut controller: WifiController<'static>) {
+    println!("start connection task");
+    println!("Device capabilities: {:?}", controller.get_capabilities());
+    loop {
+        match esp_wifi::wifi::get_wifi_state() {
+            WifiState::ApStarted => {
+                // wait until we're no longer connected
+                controller.wait_for_event(WifiEvent::ApStop).await;
+                Timer::after(Duration::from_millis(5000)).await
+            }
+            _ => {}
+        }
+        if !matches!(controller.is_started(), Ok(true)) {
+            let client_config = Configuration::AccessPoint(AccessPointConfiguration {
+                ssid: "esp-wifi".try_into().unwrap(),
+                ..Default::default()
+            });
+            controller.set_configuration(&client_config).unwrap();
+            println!("Starting wifi");
+            controller.start().await.unwrap();
+            println!("Wifi started!");
+        }
+    }
+}
+
+#[embassy_executor::task]
+async fn dhcp_service(){
     const RX_BUFFER_SIZE: usize = 512; // 接收缓冲区大小
     const TX_BUFFER_SIZE: usize = 512; // 发送缓冲区大小
     const PACKET_META_SIZE: usize = 10; // 元数据大小
@@ -329,7 +432,7 @@ async fn ap_web_service(){
     loop {
 
         unsafe {
-            if let Some(ap_stack) = STACK_MUT {
+            if let Some(ap_stack) = AP_STACK_MUT {
                 loop {
                     if ap_stack.is_link_up() {
                         break;
@@ -347,28 +450,31 @@ async fn ap_web_service(){
                 // 无限循环处理消息
                 loop {
                     let mut buf = [0u8; 512];
-
+                    println!("等待请求") ;
                     match udp_socket.recv_from(&mut buf).await {
                         Ok((n, src)) => {
+                            println!("Received {} bytes from {}", n, src);
+                            println!("Received:{:?} ", buf );
+
                             let mut msg = Message::new(buf).unwrap();
-                            print!("msg op_type:{:?}",msg.op().unwrap()) ;
+                            println!("msg op_type:{:?}",msg.op().unwrap()) ;
                             let options =  v4_options!(msg; MessageType required, ServerIdentifier, RequestedIpAddress);
                             match options {
                                 Ok((msg_type,si,ria)) => {
-                                    print!("msg type:{:?}",msg_type) ;
+                                    println!("msg type:{:?}",msg_type) ;
                                     if msg_type == dhcparse::dhcpv4::MessageType::DISCOVER {
-                                        if let Some(ip_addr) = ip_pool.pop() {
-                                            send_dhcp_offer(&udp_socket, src, ip_addr).await;
-                                        }
+                                        send_dhcp_offer(&udp_socket, src ,&msg).await;
                                     }
                                     else if msg_type ==  dhcparse::dhcpv4::MessageType::REQUEST {
                                         let ip_addr = Ipv4Addr::new(192, 168, 2, 2);
-                                        send_dhcp_ack(&udp_socket, src, ip_addr).await;
+                                        send_dhcp_ack(&udp_socket, src, &msg).await;
+
+                                        AP_DHCP_FINISH_SIGNAL.signal(());
                                     }
                                 }
                                 Err(_) => {}
                             }
-                            println!("Received {} bytes from {}", n, src);
+
                             //udp_socket.send_to(&buf[..n], src).await;
                         }
                         Err(e) => {
@@ -385,25 +491,165 @@ async fn ap_web_service(){
     }
 }
 
-
-
-async fn send_dhcp_offer(udp_socket: &UdpSocket<'_>, src_addr: IpEndpoint, ip_addr: Ipv4Addr) {
+async fn send_dhcp_offer(udp_socket: &UdpSocket<'_>, src_addr: IpEndpoint, receive_msg: &Message<[u8; 512]>) {
     println!("send_dhcp_offer") ;
     // 构造并发送 DHCP Offer 消息
+    let router_ip:&Addr = (&[192u8,168,2,1][..]).try_into().unwrap();
+    let submask:&Addr = (&[255u8,255,255,0][..]).try_into().unwrap();
 
     let mut offer_message = [0u8; 512];
+
+    offer_message[2] = 6;
+
     let mut msg = Encoder
         .append_options([DhcpOption::MessageType(dhcparse::dhcpv4::MessageType::OFFER)])
+        .append_options([DhcpOption::Router(&[*router_ip])])
+        .append_options([DhcpOption::SubnetMask(submask)])
+        .append_options([DhcpOption::AddressLeaseTime(3600)])
+        .append_options([DhcpOption::ServerIdentifier(router_ip)])
+        .append_options([DhcpOption::DomainNameServer(&[*router_ip])])
         .encode(&Message::default(), &mut offer_message).unwrap();
     msg.set_op(dhcparse::dhcpv4::OpCode::BootReply);
+    msg.set_xid(receive_msg.xid());
+    msg.set_chaddr(receive_msg.chaddr().unwrap());
+
+
+    let temp :[u8;4] = [192,168,2,1];
+    let si_addr:&Addr = (&temp[..]).try_into().unwrap();
+    *msg.siaddr_mut() = *si_addr;
+
+
+    let temp :[u8;4] = [192,168,2,2];
+    let yi_addr:&Addr = (&temp[..]).try_into().unwrap();
+    *msg.yiaddr_mut() = *yi_addr;
+
+    offer_message[1] = 1;
     println!("{:?}",&offer_message);
 
-    udp_socket.send_to(&offer_message, src_addr).await;
+
+    let broadcast = ( Ipv4Address::BROADCAST,68);
+    udp_socket.send_to(&offer_message, broadcast).await;
 }
 
-async fn send_dhcp_ack(udp_socket: & UdpSocket<'_>, src_addr: IpEndpoint, ip_addr: Ipv4Addr) {
+async fn send_dhcp_ack(udp_socket: & UdpSocket<'_>, src_addr: IpEndpoint, receive_msg: &Message<[u8; 512]>) {
     println!("send_dhcp_ack") ;
     // 构造并发送 DHCP Acknowledge 消息
-    let ack_message = [/* DHCP Acknowledge 消息内容 */];
-    udp_socket.send_to(&ack_message, src_addr).await;
+    let router_ip:&Addr = (&[192u8,168,2,1][..]).try_into().unwrap();
+    let submask:&Addr = (&[255u8,255,255,0][..]).try_into().unwrap();
+    let mut offer_message = [0u8; 512];
+    offer_message[1] = 1;
+    offer_message[2] = 6;
+
+    let mut msg = Encoder
+        .append_options([DhcpOption::MessageType(dhcparse::dhcpv4::MessageType::ACK)])
+        .append_options([DhcpOption::Router(&[*router_ip])])
+        .append_options([DhcpOption::SubnetMask(submask)])
+        .append_options([DhcpOption::AddressLeaseTime(3600)])
+        .append_options([DhcpOption::ServerIdentifier(router_ip)])
+        .append_options([DhcpOption::DomainNameServer(&[*router_ip])])
+        .encode(&Message::default(), &mut offer_message).unwrap();
+    msg.set_op(dhcparse::dhcpv4::OpCode::BootReply);
+    msg.set_xid(receive_msg.xid());
+    msg.set_chaddr(receive_msg.chaddr().unwrap());
+
+    let temp :[u8;4] = [192,168,2,1];
+    let si_addr:&Addr = (&temp[..]).try_into().unwrap();
+    *msg.siaddr_mut() = *si_addr;
+
+
+
+    let temp :[u8;4] = [192,168,2,2];
+    let yi_addr:&Addr = (&temp[..]).try_into().unwrap();
+    *msg.yiaddr_mut() = *yi_addr;
+
+    offer_message[1] = 1;
+    println!("{:?}",&offer_message);
+
+    let broadcast = ( Ipv4Address::BROADCAST,68);
+    udp_socket.send_to(&offer_message, broadcast).await;
+}
+
+#[embassy_executor::task]
+async fn web_service(){
+    let mut stack:Option<&Stack<WifiDevice<WifiApDevice>>> = None;
+    unsafe {
+        stack = AP_STACK_MUT;
+    }
+    if let Some(ap_stack) = stack {
+        let mut rx_buffer = [0; 1536];
+        let mut tx_buffer = [0; 1536];
+        //网页配置服务
+        let mut socket = TcpSocket::new(ap_stack, &mut rx_buffer, &mut tx_buffer);
+        socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
+        loop {
+            println!("Wait for connection...");
+            let r = socket
+                .accept(IpListenEndpoint {
+                    addr: None,
+                    port: 8080,
+                })
+                .await;
+            println!("Connected...");
+
+            if let Err(e) = r {
+                println!("connect error: {:?}", e);
+                continue;
+            }
+
+            use embedded_io_async::Write;
+
+            let mut buffer = [0u8; 1024];
+            let mut pos = 0;
+            loop {
+                match socket.read(&mut buffer).await {
+                    Ok(0) => {
+                        println!("read EOF");
+                        break;
+                    }
+                    Ok(len) => {
+                        let to_print =
+                            unsafe { core::str::from_utf8_unchecked(&buffer[..(pos + len)]) };
+
+                        if to_print.contains("\r\n\r\n") {
+                            print!("{}", to_print);
+                            println!();
+                            break;
+                        }
+
+                        pos += len;
+                    }
+                    Err(e) => {
+                        println!("read error: {:?}", e);
+                        break;
+                    }
+                };
+            }
+
+            let r = socket
+                .write_all(
+                    b"HTTP/1.0 200 OK\r\n\r\n\
+            <html>\
+                <body>\
+                    <h1>Hello Rust! Hello esp-wifi!</h1>\
+                </body>\
+            </html>\r\n\
+            ",
+                )
+                .await;
+            if let Err(e) = r {
+                println!("write error: {:?}", e);
+            }
+
+            let r = socket.flush().await;
+            if let Err(e) = r {
+                println!("flush error: {:?}", e);
+            }
+            Timer::after(Duration::from_millis(1000)).await;
+
+            socket.close();
+            Timer::after(Duration::from_millis(1000)).await;
+
+            socket.abort();
+        }
+    }
 }

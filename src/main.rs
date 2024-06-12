@@ -66,7 +66,7 @@ use log::info;
 
 use crate::pages::{ Page};
 use crate::weather::weather_worker;
-use crate::wifi::connect_wifi;
+use crate::wifi::{connect_wifi, start_wifi_ap};
 use crate::worldtime::{get_clock, ntp_worker};
 
 
@@ -155,20 +155,26 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
 
     spawner.spawn(event::run(key1,key2,key3,key4)).ok();
 
-    let mut rx_buffer = [0; 4096];
-    let mut tx_buffer = [0; 4096];
-
     //连接wifi
-    let stack = connect_wifi(spawner,
-                             peripherals.SYSTIMER,
-                             Rng::new(peripherals.RNG),
-                             peripherals.WIFI,
-                             system.radio_clock_control,
-                             clocks).await;
+    let need_ap = true;
+    if  need_ap {
+        let stack = start_wifi_ap(spawner,
+                                 peripherals.SYSTIMER,
+                                 Rng::new(peripherals.RNG),
+                                 peripherals.WIFI,
+                                 system.radio_clock_control,
+                                 clocks).await;
+    }else {
+        let stack = connect_wifi(spawner,
+                                 peripherals.SYSTIMER,
+                                 Rng::new(peripherals.RNG),
+                                 peripherals.WIFI,
+                                 system.radio_clock_control,
+                                 clocks).await;
 
-
-    spawner.spawn(ntp_worker()).ok();
-    spawner.spawn(weather_worker()).ok();
+        spawner.spawn(ntp_worker()).ok();
+        spawner.spawn(weather_worker()).ok();
+    }
     loop {
 
         if let Some(clock) =  get_clock(){

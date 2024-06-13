@@ -25,7 +25,7 @@ use crate::pages::{MenuItem, Page, PageEnum};
 use crate::pages::calender_page::CalenderPage;
 use crate::pages::games_page::GamesPage;
 use crate::pages::PageEnum::{ECalenderPage, EChip8Page, EClockPage, EQrcodePage, ETimerPage, EWeatherPage};
-use crate::pages::qrcode_page::{ QrcodePage};
+use crate::pages::setting_page::{SettingPage};
 use crate::pages::timer_page::TimerPage;
 use crate::pages::weather_page::WeatherPage;
 use crate::widgets::list_widget::ListWidget;
@@ -263,7 +263,7 @@ impl Page for  MainPage{
                     self.back().await;
                 }
                 PageEnum::EQrcodePage =>{
-                    let mut qrcode_page = QrcodePage::new();
+                    let mut qrcode_page = SettingPage::new();
                     qrcode_page.bind_event().await;
                     qrcode_page.run(spawner).await;
                     self.back().await;

@@ -20,6 +20,7 @@ mod worldtime;
 mod random;
 mod model;
 mod weather;
+mod storage;
 
 use core::cell::RefCell;
 use core::convert::Infallible;
@@ -66,7 +67,7 @@ use log::info;
 
 use crate::pages::{ Page};
 use crate::weather::weather_worker;
-use crate::wifi::{connect_wifi, start_wifi_ap};
+use crate::wifi::{connect_wifi, start_wifi_ap, WIFI_MODEL, WifiModel};
 use crate::worldtime::{get_clock, ntp_worker};
 
 
@@ -156,8 +157,9 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
     spawner.spawn(event::run(key1,key2,key3,key4)).ok();
 
     //连接wifi
-    let need_ap = true;
+    let need_ap = false;
     if  need_ap {
+        WIFI_MODEL.lock().await.replace(WifiModel::AP);
         let stack = start_wifi_ap(spawner,
                                  peripherals.SYSTIMER,
                                  Rng::new(peripherals.RNG),
@@ -165,6 +167,7 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
                                  system.radio_clock_control,
                                  clocks).await;
     }else {
+        WIFI_MODEL.lock().await.replace(WifiModel::STA);
         let stack = connect_wifi(spawner,
                                  peripherals.SYSTIMER,
                                  Rng::new(peripherals.RNG),
@@ -194,7 +197,7 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
 
 fn alloc(){
     // -------- Setup Allocator --------
-    const HEAP_SIZE: usize = 40 * 1024;
+    const HEAP_SIZE: usize = 60 * 1024;
     static mut HEAP: [u8; HEAP_SIZE] = [0; HEAP_SIZE];
     #[global_allocator]
     static ALLOCATOR: embedded_alloc::Heap = embedded_alloc::Heap::empty();

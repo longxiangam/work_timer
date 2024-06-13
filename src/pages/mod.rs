@@ -9,7 +9,7 @@ mod games_page;
 mod timer_page;
 mod weather_page;
 mod calender_page;
-mod qrcode_page;
+mod setting_page;
 
 
 enum PageEnum {

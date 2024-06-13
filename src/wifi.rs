@@ -1,13 +1,14 @@
-
+use alloc::string::ToString;
 use core::cell::RefCell;
 use core::net::Ipv4Addr;
+use core::ops::DerefMut;
 use core::str::FromStr;
 use dhcparse::dhcpv4::{Addr, DhcpOption, Encode, Encoder, Message};
 use dhcparse::v4_options;
 use embassy_executor::Spawner;
 use embassy_futures::select::{Either, select};
 use embassy_net::{Config, IpAddress, IpEndpoint, IpListenEndpoint, Ipv4Address, Ipv4Cidr, Stack, StackResources, StaticConfigV4};
-use embassy_net::tcp::TcpSocket;
+use embassy_net::tcp::{AcceptError, TcpSocket};
 use embassy_net::udp::UdpSocket;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
@@ -21,11 +22,15 @@ use hal::{embassy, Rng};
 use hal::clock::Clocks;
 use hal::peripherals::{SYSTIMER, WIFI};
 use hal::system::RadioClockControl;
-use heapless::Vec;
+use heapless::{String, Vec};
 use static_cell::{make_static, StaticCell};
 
-
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq,Copy, Clone)]
+pub enum WifiModel{
+    AP,
+    STA,
+}
+#[derive(Eq, PartialEq,Copy, Clone)]
 pub enum WifiNetState {
     WifiConnecting,
     WifiConnected,
@@ -48,16 +53,17 @@ const PASSWORD: &str = env!("PASSWORD");
 
 const HOW_LONG_SECS_CLOSE:u64 = 30;//20秒未使用wifi 断开
 
-
+pub static mut IP_ADDRESS:String<20> = String::new();
 pub static STOP_WIFI_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 pub static RECONNECT_WIFI_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
+pub static STOP_WEB_SERVICE: Signal<CriticalSectionRawMutex,()> = Signal::new();
 pub static LAST_USE_TIME_SECS:Mutex<CriticalSectionRawMutex,RefCell<u64>>  =  Mutex::new(RefCell::new(0));
 pub static WIFI_STATE:Mutex<CriticalSectionRawMutex,RefCell<WifiNetState>>  =  Mutex::new(RefCell::new(WifiNetState::WifiStopped));
 pub static mut STACK_MUT: Option<&'static Stack<WifiDevice<'static, WifiStaDevice>>>  =  None;
 pub static mut AP_STACK_MUT: Option<&'static Stack<WifiDevice<'static, WifiApDevice>>>  =  None;
-pub static AP_DHCP_FINISH_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
-pub static HAL_RNG:Mutex<CriticalSectionRawMutex,Option<Rng>>  =  Mutex::new(None);
 
+pub static HAL_RNG:Mutex<CriticalSectionRawMutex,Option<Rng>>  =  Mutex::new(None);
+pub static WIFI_MODEL:Mutex<CriticalSectionRawMutex,Option<WifiModel>> = Mutex::new(None);
 pub async fn connect_wifi(spawner: &Spawner,
                           systimer: SYSTIMER,
                           rng: Rng,
@@ -66,7 +72,7 @@ pub async fn connect_wifi(spawner: &Spawner,
                           clocks: &Clocks<'_> )
     -> Result<&'static Stack<WifiDevice<'static, WifiStaDevice>>, WifiNetError> {
 
-    (*HAL_RNG.lock().await).replace(rng);
+    HAL_RNG.lock().await.replace(rng);
 
     let timer = hal::systimer::SystemTimer::new(systimer).alarm0;
     let init = initialize(
@@ -156,6 +162,9 @@ pub async fn connect_wifi(spawner: &Spawner,
     loop {
         if let Some(config) = stack.config_v4() {
             println!("Got IP: {}", config.address);
+            unsafe {
+                IP_ADDRESS =  config.address.address().to_string().parse().unwrap();
+            }
             break;
         }
         Timer::after(Duration::from_millis(500)).await;
@@ -239,7 +248,7 @@ async fn connection_wifi(mut controller: WifiController<'static>) {
     }
 }
 
-async fn refresh_last_time(){
+pub async fn refresh_last_time(){
     LAST_USE_TIME_SECS.lock().await.replace(Instant::now().as_secs());
 }
 
@@ -324,7 +333,7 @@ pub async fn start_wifi_ap(spawner: &Spawner,
                            clocks: &Clocks<'_> )
                            -> Result<&'static Stack<WifiDevice<'static, WifiApDevice>>, WifiNetError> {
 
-    (*HAL_RNG.lock().await).replace(rng);
+    HAL_RNG.lock().await.replace(rng);
 
     let timer = hal::systimer::SystemTimer::new(systimer).alarm0;
     let init = initialize(
@@ -373,6 +382,9 @@ pub async fn start_wifi_ap(spawner: &Spawner,
     loop {
         if let Some(config) = ap_stack.config_v4() {
             println!("Got IP: {}", config.address);
+            unsafe {
+                IP_ADDRESS =  config.address.address().to_string().parse().unwrap();
+            }
             break;
         }
         Timer::after(Duration::from_millis(500)).await;
@@ -380,11 +392,6 @@ pub async fn start_wifi_ap(spawner: &Spawner,
     unsafe {
         AP_STACK_MUT = Some(ap_stack);
     }
-
-    AP_DHCP_FINISH_SIGNAL.wait().await;
-    AP_DHCP_FINISH_SIGNAL.reset();
-    spawner.spawn(web_service()).ok();
-
 
     Ok(ap_stack)
 }
@@ -467,8 +474,6 @@ async fn dhcp_service(){
                                     else if msg_type ==  dhcparse::dhcpv4::MessageType::REQUEST {
                                         let ip_addr = Ipv4Addr::new(192, 168, 2, 2);
                                         send_dhcp_ack(&udp_socket, src, &msg).await;
-
-                                        AP_DHCP_FINISH_SIGNAL.signal(());
                                     }
                                 }
                                 Err(_) => {}
@@ -569,77 +574,111 @@ async fn send_dhcp_ack(udp_socket: & UdpSocket<'_>, src_addr: IpEndpoint, receiv
 }
 
 #[embassy_executor::task]
-async fn web_service(){
-    let mut stack:Option<&Stack<WifiDevice<WifiApDevice>>> = None;
-    unsafe {
-        stack = AP_STACK_MUT;
-    }
-    if let Some(ap_stack) = stack {
-        let mut rx_buffer = [0; 1536];
-        let mut tx_buffer = [0; 1536];
-        //网页配置服务
-        let mut socket = TcpSocket::new(ap_stack, &mut rx_buffer, &mut tx_buffer);
-        socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
-        loop {
-            println!("Wait for connection...");
-            let r = socket
-                .accept(IpListenEndpoint {
-                    addr: None,
-                    port: 8080,
-                })
-                .await;
-            println!("Connected...");
-
-            if let Err(e) = r {
-                println!("connect error: {:?}", e);
-                continue;
+pub async fn web_service(){
+    match WIFI_MODEL.lock().await.unwrap() {
+        WifiModel::AP => {
+            unsafe {
+                if let Some(stack) = AP_STACK_MUT {
+                    web_tcp_socket(stack).await;
+                }
             }
-
-            use embedded_io_async::Write;
-
-            let mut buffer = [0u8; 1024];
-            let mut pos = 0;
-            loop {
-                match socket.read(&mut buffer).await {
-                    Ok(0) => {
-                        println!("read EOF");
-                        break;
-                    }
-                    Ok(len) => {
-                        let to_print =
-                            unsafe { core::str::from_utf8_unchecked(&buffer[..(pos + len)]) };
-
-                        if to_print.contains("\r\n\r\n") {
-                            print!("{}", to_print);
-                            println!();
-
-                            process_http(&mut socket,to_print).await;
+        }
+        WifiModel::STA => {
+            unsafe {
+                loop {
+                    match use_wifi().await {
+                        Ok(stack) => {
+                            web_tcp_socket(stack).await;
+                            finish_wifi().await;
                             break;
                         }
-
-                        pos += len;
+                        Err(_) => {}
                     }
-                    Err(e) => {
-                        println!("read error: {:?}", e);
-                        break;
-                    }
-                };
+                    Timer::after(Duration::from_millis(100));
+                }
             }
-
-            let r = socket.flush().await;
-            if let Err(e) = r {
-                println!("flush error: {:?}", e);
-            }
-            Timer::after(Duration::from_millis(1000)).await;
-
-            socket.close();
-            Timer::after(Duration::from_millis(1000)).await;
-
-            socket.abort();
         }
     }
+
 }
 
+async fn  web_tcp_socket<D: esp_wifi::wifi::WifiDeviceMode> (stack:&Stack<WifiDevice<'_,D>>){
+
+    let mut rx_buffer = [0; 1536];
+    let mut tx_buffer = [0; 1536];
+    //网页配置服务
+    let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
+    socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
+    loop {
+        println!("Wait for connection...");
+        let wait_stop = STOP_WEB_SERVICE.wait();
+        let r = socket
+            .accept(IpListenEndpoint {
+                addr: None,
+                port: 8080,
+            })
+            ;
+        match select(wait_stop,r).await{
+            Either::First(_) => {
+                STOP_WEB_SERVICE.reset();
+                break;
+            }
+            Either::Second(r) => {
+
+                println!("Connected...");
+
+                if let Err(e) = r {
+                    println!("connect error: {:?}", e);
+                    continue;
+                }
+
+                use embedded_io_async::Write;
+
+                let mut buffer = [0u8; 1024];
+                let mut pos = 0;
+                loop {
+                    match socket.read(&mut buffer).await {
+                        Ok(0) => {
+                            println!("read EOF");
+                            break;
+                        }
+                        Ok(len) => {
+                            let to_print =
+                                unsafe { core::str::from_utf8_unchecked(&buffer[..(pos + len)]) };
+
+                            if to_print.contains("\r\n\r\n") {
+                                print!("{}", to_print);
+                                println!();
+
+                                process_http(&mut socket,to_print).await;
+                                break;
+                            }
+
+                            pos += len;
+                        }
+                        Err(e) => {
+                            println!("read error: {:?}", e);
+                            break;
+                        }
+                    };
+                }
+
+                let r = socket.flush().await;
+                if let Err(e) = r {
+                    println!("flush error: {:?}", e);
+                }
+                Timer::after(Duration::from_millis(1000)).await;
+
+                socket.close();
+                Timer::after(Duration::from_millis(1000)).await;
+
+                socket.abort();
+
+            }
+        }
+    }
+
+}
 async fn process_http(socket:&mut TcpSocket<'_>,buffer:&str){
     use embedded_io_async::Write;
     use heapless::String;
@@ -649,23 +688,11 @@ async fn process_http(socket:&mut TcpSocket<'_>,buffer:&str){
     req.parse(buffer.as_ref());
     println!("request:{:?}",req);
     if let Some("GET") = req.method {
-        if let Some("/") = req.path {
+        if let Some("/config") = req.path {
+            let content = concat!("HTTP/1.0 200 OK\r\n\r\n",include_str!("../files/config.html"));
             let r = socket
                 .write_all(
-                    b"HTTP/1.0 200 OK\r\n\r\n\
-            <html>\
-                <body>\
-                   <form action='/configure' method='POST'>\
-                    <label for='ssid'>SSID:</label>\
-                    <input type='text' id='ssid' name='ssid' />\
-                    <br/>\
-                    <label for='password'>Password:</label>\
-                    <input type='password' id='password' name='password' />\
-                    <br/>\
-                    <input type='submit' value='Configure' />\
-                   </form>\
-                </body>\
-            </html>\r\n",
+                    content.as_bytes()
                 )
                 .await;
 
@@ -675,7 +702,7 @@ async fn process_http(socket:&mut TcpSocket<'_>,buffer:&str){
         }
     }
     if let Some("POST") = req.method {
-        if let Some("/configure") = req.path {
+        if let Some("/config") = req.path {
             let parts:heapless::Vec<&str,10> = buffer.split("\r\n\r\n").collect();
             if parts.len() > 1 {
 

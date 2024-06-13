@@ -41,7 +41,7 @@ embedded-tls={version = "0.17"  , default-features = false}
 sntpc = {version = "0.3",features = ["async"] , default-features = false}
 
 reqwless = { version = "0.11", default-features = false ,features = ["embedded-tls"]}
-#lite-json = { version = "0.2", default-features = false, defaults = ["no_std"] }
+
 mini-json={path="../mini-json"}
 
 eg-seven-segment ={version = "0.2"}

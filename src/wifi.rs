@@ -2,7 +2,7 @@ use alloc::string::ToString;
 use core::cell::RefCell;
 use core::net::Ipv4Addr;
 use core::ops::DerefMut;
-use core::str::FromStr;
+use core::str::{from_utf8, FromStr};
 use dhcparse::dhcpv4::{Addr, DhcpOption, Encode, Encoder, Message};
 use dhcparse::v4_options;
 use embassy_executor::Spawner;
@@ -15,17 +15,21 @@ use embassy_sync::mutex::Mutex;
 use embassy_sync::signal::Signal;
 use embassy_time::{Duration, Instant, Timer};
 use esp_println::{print, println};
+use esp_storage::FlashStorageError;
 use esp_wifi::{EspWifiInitFor, initialize};
 use esp_wifi::wifi::{AccessPointConfiguration, AuthMethod, ClientConfiguration, Configuration, WifiApDevice, WifiController, WifiDevice, WifiEvent, WifiStaDevice, WifiState};
 use esp_wifi::wifi::ipv4::{ RouterConfiguration, SocketAddrV4};
 use hal::{embassy, Rng};
 use hal::clock::Clocks;
 use hal::peripherals::{SYSTIMER, WIFI};
+use hal::reset::software_reset;
 use hal::system::RadioClockControl;
 use heapless::{String, Vec};
+use httparse::Header;
 use static_cell::{make_static, StaticCell};
+use crate::storage::{NvsStorage, WIFI_INFO};
 
-#[derive(Eq, PartialEq,Copy, Clone)]
+#[derive(Eq, PartialEq,Copy, Clone,Debug)]
 pub enum WifiModel{
     AP,
     STA,
@@ -56,7 +60,7 @@ const HOW_LONG_SECS_CLOSE:u64 = 30;//20秒未使用wifi 断开
 pub static mut IP_ADDRESS:String<20> = String::new();
 pub static STOP_WIFI_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 pub static RECONNECT_WIFI_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
-pub static STOP_WEB_SERVICE: Signal<CriticalSectionRawMutex,()> = Signal::new();
+
 pub static LAST_USE_TIME_SECS:Mutex<CriticalSectionRawMutex,RefCell<u64>>  =  Mutex::new(RefCell::new(0));
 pub static WIFI_STATE:Mutex<CriticalSectionRawMutex,RefCell<WifiNetState>>  =  Mutex::new(RefCell::new(WifiNetState::WifiStopped));
 pub static mut STACK_MUT: Option<&'static Stack<WifiDevice<'static, WifiStaDevice>>>  =  None;
@@ -571,174 +575,4 @@ async fn send_dhcp_ack(udp_socket: & UdpSocket<'_>, src_addr: IpEndpoint, receiv
 
     let broadcast = ( Ipv4Address::BROADCAST,68);
     udp_socket.send_to(&offer_message, broadcast).await;
-}
-
-#[embassy_executor::task]
-pub async fn web_service(){
-    match WIFI_MODEL.lock().await.unwrap() {
-        WifiModel::AP => {
-            unsafe {
-                if let Some(stack) = AP_STACK_MUT {
-                    web_tcp_socket(stack).await;
-                }
-            }
-        }
-        WifiModel::STA => {
-            unsafe {
-                loop {
-                    match use_wifi().await {
-                        Ok(stack) => {
-                            web_tcp_socket(stack).await;
-                            finish_wifi().await;
-                            break;
-                        }
-                        Err(_) => {}
-                    }
-                    Timer::after(Duration::from_millis(100));
-                }
-            }
-        }
-    }
-
-}
-
-async fn  web_tcp_socket<D: esp_wifi::wifi::WifiDeviceMode> (stack:&Stack<WifiDevice<'_,D>>){
-
-    let mut rx_buffer = [0; 1536];
-    let mut tx_buffer = [0; 1536];
-    //网页配置服务
-    let mut socket = TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
-    socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
-    loop {
-        println!("Wait for connection...");
-        let wait_stop = STOP_WEB_SERVICE.wait();
-        let r = socket
-            .accept(IpListenEndpoint {
-                addr: None,
-                port: 8080,
-            })
-            ;
-        match select(wait_stop,r).await{
-            Either::First(_) => {
-                STOP_WEB_SERVICE.reset();
-                break;
-            }
-            Either::Second(r) => {
-
-                println!("Connected...");
-
-                if let Err(e) = r {
-                    println!("connect error: {:?}", e);
-                    continue;
-                }
-
-                use embedded_io_async::Write;
-
-                let mut buffer = [0u8; 1024];
-                let mut pos = 0;
-                loop {
-                    match socket.read(&mut buffer).await {
-                        Ok(0) => {
-                            println!("read EOF");
-                            break;
-                        }
-                        Ok(len) => {
-                            let to_print =
-                                unsafe { core::str::from_utf8_unchecked(&buffer[..(pos + len)]) };
-
-                            if to_print.contains("\r\n\r\n") {
-                                print!("{}", to_print);
-                                println!();
-
-                                process_http(&mut socket,to_print).await;
-                                break;
-                            }
-
-                            pos += len;
-                        }
-                        Err(e) => {
-                            println!("read error: {:?}", e);
-                            break;
-                        }
-                    };
-                }
-
-                let r = socket.flush().await;
-                if let Err(e) = r {
-                    println!("flush error: {:?}", e);
-                }
-                Timer::after(Duration::from_millis(1000)).await;
-
-                socket.close();
-                Timer::after(Duration::from_millis(1000)).await;
-
-                socket.abort();
-
-            }
-        }
-    }
-
-}
-async fn process_http(socket:&mut TcpSocket<'_>,buffer:&str){
-    use embedded_io_async::Write;
-    use heapless::String;
-
-    let mut headers = [httparse::EMPTY_HEADER; 64];
-    let mut req = httparse::Request::new(&mut headers);
-    req.parse(buffer.as_ref());
-    println!("request:{:?}",req);
-    if let Some("GET") = req.method {
-        if let Some("/config") = req.path {
-            let content = concat!("HTTP/1.0 200 OK\r\n\r\n",include_str!("../files/config.html"));
-            let r = socket
-                .write_all(
-                    content.as_bytes()
-                )
-                .await;
-
-            if let Err(e) = r {
-                println!("write error: {:?}", e);
-            }
-        }
-    }
-    if let Some("POST") = req.method {
-        if let Some("/config") = req.path {
-            let parts:heapless::Vec<&str,10> = buffer.split("\r\n\r\n").collect();
-            if parts.len() > 1 {
-
-                println!("body:{:?}",parts[1]);
-
-                let form_fields:Vec<&str,10> = parts[1].split("&").collect();
-                for form_field in form_fields {
-                    let field:Vec<&str,2> = form_field.split("=").collect();
-                    if field[0] == "ssid" {
-                        println!("ssid:{}",field[1]);
-                    }else if field[0] == "password" {
-                        println!("password:{}",field[1]);
-                    }
-                }
-                let r = socket
-                    .write_all(
-                        b"HTTP/1.0 200 OK\r\n\r\n\
-            <html>\
-                <body>\
-                   <form action='/restart' method='POST'>\
-                    <br/>\
-                    <br/>\
-                    <input type='submit' value='' />\
-                   </form>\
-                </body>\
-            </html>\r\n",
-                    )
-                    .await;
-
-                if let Err(e) = r {
-                    println!("write error: {:?}", e);
-                }
-            }
-
-        }
-    }
-
-
 }

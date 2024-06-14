@@ -5,6 +5,7 @@
 #![feature(async_closure)]
 #![allow(unused)]
 #![allow(async_fn_in_trait)]
+#![feature(generic_const_exprs)]
 
 extern crate alloc;
 pub mod display;
@@ -21,10 +22,14 @@ mod random;
 mod model;
 mod weather;
 mod storage;
+pub mod web_service;
 
+use alloc::string::ToString;
 use core::cell::RefCell;
 use core::convert::Infallible;
-use core::mem;
+use core::{mem, ptr};
+use core::mem::size_of;
+use core::str::FromStr;
 
 use embassy_executor::Spawner;
 use embassy_net::tcp::TcpSocket;
@@ -54,6 +59,7 @@ use hal::dma::Channel0;
 
 use hal::gpio::{Gpio11, Gpio12, Gpio13, Gpio18, Gpio19, Gpio4, Gpio5, Gpio8, Gpio9, Input, NO_PIN, OpenDrain, Output, PullUp};
 use hal::ledc::{channel, LEDC, LowSpeed, LSGlobalClkSource, timer};
+use hal::reset::software_reset;
 use hal::riscv::_export::critical_section::Mutex;
 use hal::riscv::_export::critical_section;
 use hal::rtc_cntl::sleep::TimerWakeupSource;
@@ -62,10 +68,12 @@ use hal::spi::FullDuplexMode;
 use hal::spi::master::dma::SpiDma;
 use hal::system::Peripheral::Ledc;
 use hal::system::RadioClockControl;
+use heapless::String;
 use lcd_drivers::color::TwoBitColor;
 use log::info;
 
 use crate::pages::{ Page};
+use crate::storage::{enter_process, NvsStorage, read_flash, WIFI_INFO, WifiStorage, write_flash};
 use crate::weather::weather_worker;
 use crate::wifi::{connect_wifi, start_wifi_ap, WIFI_MODEL, WifiModel};
 use crate::worldtime::{get_clock, ntp_worker};
@@ -105,13 +113,13 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
     let timer_group0 = TimerGroup::new(peripherals.TIMG0, &clocks);
     embassy::init(&clocks, timer_group0);
 
-/*    println!("进入main");
-    //测试软件重启位
+/*    //测试软件重启位
     unsafe {
         peripherals.LPWR.options0().modify(|_, w| w.sw_sys_rst().set_bit());
     }*/
 
     println!("do main");
+    enter_process().await;
     //spi
     let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
 
@@ -152,20 +160,42 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
     let key_ec11 = io.pins.gpio13.into_pull_up_input();
 
     spawner.spawn(ec11::task(a_point,b_point,key_ec11)).ok();
-    spawner.spawn(pages::main_task(spawner.clone())).ok();
+
 
     spawner.spawn(event::run(key1,key2,key3,key4)).ok();
 
+
     //连接wifi
-    let need_ap = false;
+    let mut need_ap = false;
+
+
+    loop {
+        if let Some(wifi) = WIFI_INFO.lock().await.as_ref(){
+            println!("wifi_state:{:?}",wifi);
+            if !wifi.wifi_finish {
+                need_ap = true;
+            }
+            break;
+        }
+        Timer::after(Duration::from_millis(50)).await;
+    }
     if  need_ap {
         WIFI_MODEL.lock().await.replace(WifiModel::AP);
+        println!("wifi_model:{:?}",WIFI_MODEL.lock().await.as_ref());
         let stack = start_wifi_ap(spawner,
                                  peripherals.SYSTIMER,
                                  Rng::new(peripherals.RNG),
                                  peripherals.WIFI,
                                  system.radio_clock_control,
                                  clocks).await;
+
+        loop {
+            let mut qrcode_page = pages::setting_page::SettingPage::new();
+            qrcode_page.bind_event().await;
+            qrcode_page.run(spawner.clone()).await;
+            Timer::after(Duration::from_secs(50)).await;
+        }
+
     }else {
         WIFI_MODEL.lock().await.replace(WifiModel::STA);
         let stack = connect_wifi(spawner,
@@ -177,6 +207,7 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
 
         spawner.spawn(ntp_worker()).ok();
         spawner.spawn(weather_worker()).ok();
+        spawner.spawn(pages::main_task(spawner.clone())).ok();
     }
     loop {
 
@@ -185,6 +216,7 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
         }
         //enter_deep(peripherals.LPWR, hal::Delay::new(clocks), core::time::Duration::from_secs(10));
         Timer::after(Duration::from_secs(10)).await;
+
     }
 
 

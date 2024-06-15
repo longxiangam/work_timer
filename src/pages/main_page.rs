@@ -22,9 +22,9 @@ use crate::display::{display_mut,  RENDER_CHANNEL, RenderInfo};
 use crate::event::EventType;
 use crate::pages::clock_page::{ClockPage};
 use crate::pages::{MenuItem, Page, PageEnum};
-use crate::pages::calender_page::CalenderPage;
+use crate::pages::calendar_page::CalendarPage;
 use crate::pages::games_page::GamesPage;
-use crate::pages::PageEnum::{ECalenderPage, EChip8Page, EClockPage, ESettingPage, ETimerPage, EWeatherPage};
+use crate::pages::PageEnum::{ECalendarPage, EChip8Page, EClockPage, ESettingPage, ETimerPage, EWeatherPage};
 use crate::pages::setting_page::{SettingPage};
 use crate::pages::timer_page::TimerPage;
 use crate::pages::weather_page::WeatherPage;
@@ -97,7 +97,7 @@ impl Page for  MainPage{
         menus.push(MenuItem::new(String::<20>::from_str("时钟").unwrap(), EClockPage));
         menus.push(MenuItem::new(String::<20>::from_str("定时器").unwrap(), ETimerPage));
         menus.push(MenuItem::new(String::<20>::from_str("天气").unwrap(), EWeatherPage));
-        menus.push(MenuItem::new(String::<20>::from_str("日历").unwrap(), ECalenderPage));
+        menus.push(MenuItem::new(String::<20>::from_str("日历").unwrap(), ECalendarPage));
         menus.push(MenuItem::new(String::<20>::from_str("游戏").unwrap(), EChip8Page));
         menus.push(MenuItem::new(String::<20>::from_str("二维码").unwrap(), ESettingPage));
 
@@ -248,10 +248,10 @@ impl Page for  MainPage{
                     clock_page.run(spawner).await;
                     self.back().await;
                 }
-                ECalenderPage => {
-                    let mut calender_page = CalenderPage::new();
-                    calender_page.bind_event().await;
-                    calender_page.run(spawner).await;
+                ECalendarPage => {
+                    let mut calendar_page = CalendarPage::new();
+                    calendar_page.bind_event().await;
+                    calendar_page.run(spawner).await;
                     self.back().await;
                 }
                 EChip8Page => {

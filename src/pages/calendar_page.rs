@@ -7,7 +7,7 @@ use embassy_time::{Duration, Instant, Timer};
 use embedded_graphics::Drawable;
 use embedded_graphics::mono_font::ascii::FONT_6X9;
 use embedded_graphics::mono_font::MonoTextStyleBuilder;
-use embedded_graphics::prelude::{DrawTarget, Point, Size};
+use embedded_graphics::prelude::{DrawTarget, OriginDimensions, Point, Size};
 use embedded_graphics::text::{Baseline, Text, TextStyle, TextStyleBuilder};
 use esp_println::println;
 use lcd_drivers::color::TwoBitColor;
@@ -18,29 +18,29 @@ use u8g2_fonts::fonts;
 use crate::display::{display_mut, RENDER_CHANNEL, RenderInfo};
 use crate::event;
 use crate::event::EventType;
-use crate::widgets::calender::Calender;
+use crate::widgets::calendar::Calendar;
 use crate::worldtime::{CLOCK_SYNC_SUCCESS, get_clock};
 
-pub struct CalenderPage{
+pub struct CalendarPage {
     running:bool,
     need_render:bool,
-    calender:Option<Calender<TwoBitColor>>
+    calendar:Option<Calendar<TwoBitColor>>
 }
 
-impl CalenderPage{
+impl CalendarPage {
 
     async fn back(&mut self){
         self.running = false;
     }
 }
 
-impl Page for CalenderPage{
+impl Page for CalendarPage {
      fn new() -> Self {
-        let mut calender = None;
+        let mut calendar = None;
         Self{
             running: false,
             need_render: false,
-            calender
+            calendar
         }
     }
 
@@ -50,8 +50,10 @@ impl Page for CalenderPage{
             if let Some(display) = display_mut() {
                 let _ = display.clear(TwoBitColor::White);
 
-                if let Some(ref calender) = self.calender {
-                    calender.draw(display);
+                if let Some(ref mut calendar) = self.calendar {
+                    calendar.position = Point::new(0,0);
+                    calendar.size = Size::new(display.size().width /2,display.size().height);
+                    calendar.draw(display);
                 }
 
             }
@@ -67,14 +69,14 @@ impl Page for CalenderPage{
             if !self.running {
                 break;
             }
-            if self.calender == None {
+            if self.calendar == None {
                 if *CLOCK_SYNC_SUCCESS.lock().await {
                     if let Some(clock) = get_clock() {
                         let local = clock.local().await;
                         let year = local.year();
                         let month = local.month();
                         let today = local.date();
-                        self.calender = Some(Calender::new(Point::new(0,0),Size::new(50,50),year,month,today,TwoBitColor::Black,TwoBitColor::White));
+                        self.calendar = Some(Calendar::new(Point::default(),Size::default(),year,month,today,TwoBitColor::Black,TwoBitColor::White));
                     }
                 }
             }

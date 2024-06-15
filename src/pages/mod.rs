@@ -8,7 +8,7 @@ mod clock_page;
 mod games_page;
 mod timer_page;
 mod weather_page;
-mod calender_page;
+mod calendar_page;
 pub(crate) mod setting_page;
 mod init_page;
 
@@ -18,7 +18,7 @@ enum PageEnum {
     EClockPage,
     ETimerPage,
     EWeatherPage,
-    ECalenderPage,
+    ECalendarPage,
     EChip8Page,
     ESettingPage,
 

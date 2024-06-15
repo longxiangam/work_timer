@@ -7,7 +7,7 @@ use embassy_time::{Duration, Instant, Timer};
 use embedded_graphics::Drawable;
 use embedded_graphics::mono_font::ascii::FONT_6X9;
 use embedded_graphics::mono_font::MonoTextStyleBuilder;
-use embedded_graphics::prelude::{DrawTarget, Point};
+use embedded_graphics::prelude::{DrawTarget, Point, Size};
 use embedded_graphics::text::{Baseline, Text, TextStyle, TextStyleBuilder};
 use esp_println::println;
 use lcd_drivers::color::TwoBitColor;
@@ -74,7 +74,7 @@ impl Page for CalenderPage{
                         let year = local.year();
                         let month = local.month();
                         let today = local.date();
-                        self.calender = Some(Calender::new(year,month,today,TwoBitColor::Black,TwoBitColor::White));
+                        self.calender = Some(Calender::new(Point::new(0,0),Size::new(50,50),year,month,today,TwoBitColor::Black,TwoBitColor::White));
                     }
                 }
             }

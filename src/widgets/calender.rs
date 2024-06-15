@@ -3,7 +3,7 @@ use alloc::string::ToString;
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::Drawable;
 use embedded_graphics::geometry::Point;
-use embedded_graphics::prelude::{PixelColor, Primitive, Size};
+use embedded_graphics::prelude::{DrawTargetExt, PixelColor, Primitive, Size};
 use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle, StrokeAlignment};
 use embedded_graphics::text::{Baseline, Text, TextStyleBuilder};
 
@@ -13,6 +13,8 @@ use u8g2_fonts::fonts;
 
 #[derive(Eq, PartialEq)]
 pub struct Calender<C>{
+    position:Point,
+    size:Size,
     month_first_day: Date,
     month_last_day: Date,
     today:Date,
@@ -21,11 +23,13 @@ pub struct Calender<C>{
 }
 
 impl <C> Calender<C>{
-   pub fn new(year:i32,month:Month,today:Date, front_color:C, back_color:C)->Self{
+   pub fn new(position: Point,size: Size,year:i32,month:Month,today:Date, front_color:C, back_color:C)->Self{
        let first_day = Date::from_calendar_date(year, month, 1).unwrap();
        let last_day = (first_day + time::Duration::days(31)).replace_day(1).unwrap().previous_day().unwrap();
 
        Self{
+           position,
+           size,
            month_first_day:first_day,
            month_last_day:last_day,
            today,
@@ -47,7 +51,8 @@ impl <C> Drawable for Calender<C> where C:PixelColor {
     type Output = ();
 
     fn draw<D>(&self, display: &mut D) -> Result<Self::Output, D::Error> where D: DrawTarget<Color=Self::Color> {
-
+        let clipping_area = Rectangle::new(self.position, self.size);
+        let mut clipped_display = display.cropped(&clipping_area);
         let style =
             U8g2TextStyle::new(fonts::u8g2_font_wqy12_t_gb2312b, self.front_color);
         let text_style = TextStyleBuilder::new().baseline(Baseline::Top).build();
@@ -57,13 +62,13 @@ impl <C> Drawable for Calender<C> where C:PixelColor {
         // 绘制月份和年份
         let month_year = format!("{}-{}", year, month as u8);
         Text::with_text_style(&month_year, Point::new(0, 0), style.clone(), text_style)
-            .draw(display)?;
+            .draw(&mut clipped_display)?;
 
         // 绘制星期标题
         let days = ["日", "一", "二", "三", "四", "五", "六"];
         for (i, &day) in days.iter().enumerate() {
             Text::with_text_style(day, Point::new(i as i32 * 16, 12), style.clone(), text_style)
-                .draw(display)?;
+                .draw(&mut clipped_display)?;
         }
 
         // 获取当月的第一天和最后一天
@@ -85,11 +90,11 @@ impl <C> Drawable for Calender<C> where C:PixelColor {
 
         for day in 1..=last_day.day() {
             Text::with_text_style(&day.to_string(), Point::new(x, y), style.clone(), text_style)
-                .draw(display)?;
+                .draw(&mut clipped_display)?;
             if same_month && day == today_day {
                 let _rectangle = Rectangle::new(Point::new(x-3,y+3),Size::new(16,12))
                     .into_styled(line_style)
-                    .draw(display);
+                    .draw(&mut clipped_display);
             }
 
             x += 16;

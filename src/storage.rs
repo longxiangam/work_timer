@@ -13,9 +13,9 @@ pub fn write_flash(flash_addr:u32, bytes: &[u8]) -> Result<(), FlashStorageError
     let result = flash.write(flash_addr, bytes);
 
     match result {
-        Ok(_) => { println!("保存成功");}
+        Ok(_) => { println!("save success");}
         Err(e) => {
-            println!("保存失败：{:?}",e);
+            println!("save fail：{:?}",e);
         }
     }
 

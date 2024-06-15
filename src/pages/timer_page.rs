@@ -147,54 +147,54 @@ impl Page for TimerPage {
     async fn bind_event(&mut self) {
         event::clear().await;
 
-        event::on_target(EventType::KeyShort(2),Self::mut_to_ptr(self),  move |ptr|  {
+        event::on_target(EventType::KeyShort(2),Self::mut_to_ptr(self),  move |info|  {
             println!("current_page:" );
             return Box::pin(async move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr.clone()).unwrap();
                 mut_ref.decrease();
                 println!("count_down_page:{}",mut_ref.current_count );
             });
         }).await;
-        event::on_target(EventType::KeyShort(1),Self::mut_to_ptr(self),  move |ptr|  {
+        event::on_target(EventType::KeyShort(1),Self::mut_to_ptr(self),  move |info|  {
             println!("current_page:" );
             return Box::pin(async move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr.clone()).unwrap();
                 mut_ref.increase();
                 println!("count_down_page:{}",mut_ref.current_count );
             });
         }).await;
 
-        event::on_target(EventType::KeyShort(4),Self::mut_to_ptr(self),  move |ptr|  {
+        event::on_target(EventType::KeyShort(4),Self::mut_to_ptr(self),  move |info|  {
             println!("current_page:" );
             return Box::pin(async move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr.clone()).unwrap();
                 mut_ref.back();
                 println!("count_down_page:{}",mut_ref.current_count );
             });
         }).await;
 
-        event::on_target(EventType::KeyShort(5),Self::mut_to_ptr(self),  move |ptr|  {
+        event::on_target(EventType::KeyShort(5),Self::mut_to_ptr(self),  move |info|  {
             println!("current_page:" );
             return Box::pin(async move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr.clone()).unwrap();
                 mut_ref.toggle_starting();
                 println!("count_down_page:{}",mut_ref.current_count );
             });
         }).await;
 
 
-        event::on_target(EventType::WheelFront,Self::mut_to_ptr(self),  |ptr|  {
+        event::on_target(EventType::WheelFront,Self::mut_to_ptr(self),  |info|  {
             println!("current_page:" );
             return Box::pin( async move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr.clone()).unwrap();
                 mut_ref.increase();
             });
         }).await;
 
-        event::on_target(EventType::WheelBack,Self::mut_to_ptr(self),  |ptr|  {
+        event::on_target(EventType::WheelBack,Self::mut_to_ptr(self),  |info|  {
             println!("current_page:" );
             return Box::pin( async move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr.clone()).unwrap();
                 mut_ref.decrease();
             });
         }).await;

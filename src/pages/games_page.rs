@@ -74,10 +74,10 @@ impl Page for GamesPage{
 
     async fn bind_event(&mut self) {
         event::clear().await;
-        event::on_target(EventType::WheelFront,Self::mut_to_ptr(self),  move |ptr|  {
+        event::on_target(EventType::WheelFront,Self::mut_to_ptr(self),  move |info|  {
             println!("current_page:" );
             return Box::pin( async move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr.clone()).unwrap();
                 mut_ref.chip8.key_down(6);
                 Timer::after(Duration::from_millis(100)).await;
                 mut_ref.chip8.key_up(6);
@@ -85,29 +85,29 @@ impl Page for GamesPage{
             });
         }).await;
 
-        event::on_target(EventType::WheelBack,Self::mut_to_ptr(self),  move |ptr|  {
+        event::on_target(EventType::WheelBack,Self::mut_to_ptr(self),  move |info|  {
             println!("current_page:" );
             return Box::pin( async  move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr.clone()).unwrap();
                 mut_ref.chip8.key_down(4);
                 Timer::after(Duration::from_millis(100)).await;
                 mut_ref.chip8.key_up(4);
 
             });
         }).await;
-        event::on_target(EventType::KeyShort(1),Self::mut_to_ptr(self),  move |ptr|  {
+        event::on_target(EventType::KeyShort(1),Self::mut_to_ptr(self),  move |info|  {
             println!("current_page:" );
             return Box::pin( async  move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr.clone()).unwrap();
                 mut_ref.chip8.key_down(5);
                 Timer::after(Duration::from_millis(100)).await;
                 mut_ref.chip8.key_up(5);
             });
         }).await;
-        event::on_target(EventType::KeyShort(5),Self::mut_to_ptr(self),  move |ptr|  {
+        event::on_target(EventType::KeyShort(5),Self::mut_to_ptr(self),  move |info|  {
             println!("current_page:" );
             return Box::pin( async  move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
                 mut_ref.running = false;
 
             });

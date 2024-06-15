@@ -153,28 +153,28 @@ impl Page for ClockPage {
     async fn bind_event(&mut self) {
         event::clear().await;
 
-        event::on_target(EventType::KeyShort(2),Self::mut_to_ptr(self),  move |ptr|  {
+        event::on_target(EventType::KeyShort(2),Self::mut_to_ptr(self),  move |info|  {
             println!("current_page:" );
             return Box::pin(async move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr.clone()).unwrap();
                 mut_ref.request().await;
                 println!("count_down_page:{}",mut_ref.choose_index );
             });
         }).await;
-        event::on_target(EventType::KeyShort(1),Self::mut_to_ptr(self),  move |ptr|  {
+        event::on_target(EventType::KeyShort(1),Self::mut_to_ptr(self),  move |info|  {
             println!("current_page:" );
             return Box::pin(async move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
                 mut_ref.sync_time().await;
                 println!("count_down_page:{}",mut_ref.choose_index );
             });
         }).await;
 
 
-        event::on_target(EventType::KeyShort(5),Self::mut_to_ptr(self),  move |ptr|  {
+        event::on_target(EventType::KeyShort(5),Self::mut_to_ptr(self),  move |info|  {
             println!("current_page:" );
             return Box::pin(async move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr.clone()).unwrap();
                 mut_ref.back();
             });
         }).await;

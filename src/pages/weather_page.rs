@@ -187,10 +187,10 @@ impl Page for  WeatherPage{
                 }
             });
         }).await;
-        event::on_target(EventType::KeyShort(5),Self::mut_to_ptr(self),  move |ptr|  {
+        event::on_target(EventType::KeyShort(5),Self::mut_to_ptr(self),  move |info|  {
             println!("current_page:" );
             return Box::pin(async move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr.clone()).unwrap();
                 mut_ref.running = false;
             });
         }).await;

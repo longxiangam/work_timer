@@ -117,47 +117,47 @@ impl Page for  MainPage{
     }
     async fn bind_event(&mut self){
         event::clear().await;
-        event::on(EventType::KeyShort(1),  move |ptr|  {
+        event::on(EventType::KeyShort(1),  move |info|  {
             println!("current_page:" );
             return Box::pin(async {
                 Self::get_mut().await.unwrap().increase();
                 println!("current_page:{}",Self::get_mut().await.unwrap().choose_index );
             });
         }).await;
-        event::on(EventType::KeyLongStart(1),  |ptr|  {
+        event::on(EventType::KeyLongStart(1),  |info|  {
             println!("current_page:" );
             return Box::pin( async {
                 INCREASE_CHANNEL.send(true).await;
             });
         }).await;
 
-        event::on(EventType::KeyLongEnd(1),  |ptr|  {
+        event::on(EventType::KeyLongEnd(1),  |info|  {
             println!("current_page:" );
             return Box::pin( async {
                 INCREASE_CHANNEL.send(false).await;
             });
         }).await;
-        event::on(EventType::KeyLongStart(2),  |ptr|  {
+        event::on(EventType::KeyLongStart(2),  |info|  {
             println!("current_page:" );
             return Box::pin( async {
                 DECREASE_CHANNEL.send(true).await;
             });
         }).await;
 
-        event::on(EventType::KeyLongEnd(2),  |ptr|  {
+        event::on(EventType::KeyLongEnd(2),  |info|  {
             println!("current_page:" );
             return Box::pin( async {
                 DECREASE_CHANNEL.send(false).await;
             });
         }).await;
-        event::on(EventType::KeyShort(2),  |ptr|  {
+        event::on(EventType::KeyShort(2),  |info|  {
             println!("current_page:" );
             return Box::pin( async {
                 Self::get_mut().await.unwrap().decrease();
                 println!("current_page:{}",Self::get_mut().await.unwrap().choose_index );
             });
         }).await;
-        event::on(EventType::KeyShort(5),  |ptr|  {
+        event::on(EventType::KeyShort(5),  |info|  {
             println!("current_page:" );
             return Box::pin( async {
                 let mut_ref = Self::get_mut().await.unwrap();
@@ -165,7 +165,7 @@ impl Page for  MainPage{
                 println!("current_page:{}",Self::get_mut().await.unwrap().choose_index );
             });
         }).await;
-        event::on(EventType::WheelFront,  |ptr|  {
+        event::on(EventType::WheelFront,  |info|  {
             println!("current_page:" );
             return Box::pin( async {
                 Self::get_mut().await.unwrap().increase();
@@ -173,7 +173,7 @@ impl Page for  MainPage{
             });
         }).await;
 
-        event::on(EventType::WheelBack,  |ptr|  {
+        event::on(EventType::WheelBack,  |info|  {
             println!("current_page:" );
             return Box::pin( async {
                 Self::get_mut().await.unwrap().decrease();

@@ -38,6 +38,7 @@ reqwless = { version = "0.11", default-features = false ,features = ["embedded-t
 embedded-tls={version = "0.17"  , default-features = false}
 sntpc = {version = "0.3",features = ["async"] , default-features = false}
 rand_core = { version = "0.6.4" , default-features = false ,features = ["alloc"]}
+micromath = {version = "2.1.0"}
 
 lcd-drivers={ path="../lcd_drivers/lcd-drivers",features = ["async","uc1638"]}
 chip8={package = "hello-rust", path="../reference/wasm-rust-chip8"}

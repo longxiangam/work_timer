@@ -30,7 +30,7 @@ pub enum EventType{
 #[derive(Eq, PartialEq,Debug)]
 pub struct EventInfo{
     pub ptr:Option<usize>,
-    pub speed:Option<usize>,
+    pub speed:Option<u64>,
 }
 
 
@@ -95,8 +95,12 @@ pub async fn toggle_event(event_type: EventType,ms:u64){
            /* let callback = listener.callback.as_ref().clone();
 
             callback.deref().await;*/
+            let mut speed = None;
+            if EventType::WheelFront == event_type || EventType::WheelBack == event_type {
+                speed = Some(ms);
+            }
 
-                (listener.callback)(EventInfo{ptr:listener.ptr, speed: None }).await;
+            (listener.callback)(EventInfo{ptr:listener.ptr, speed  }).await;
 
         }
     }

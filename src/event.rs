@@ -13,6 +13,7 @@ use embedded_hal_async::digital::Wait;
 use esp_println::println;
 use futures::FutureExt;
 use hal::gpio::{Gpio11, Gpio5, Gpio8, Gpio9, Input, PullUp};
+use crate::ec11::RotateState;
 
 use crate::pages::Page;
 
@@ -30,7 +31,7 @@ pub enum EventType{
 #[derive(Eq, PartialEq,Debug)]
 pub struct EventInfo{
     pub ptr:Option<usize>,
-    pub speed:Option<u64>,
+    pub rotate_state:Option<RotateState>,
 }
 
 
@@ -95,18 +96,25 @@ pub async fn toggle_event(event_type: EventType,ms:u64){
            /* let callback = listener.callback.as_ref().clone();
 
             callback.deref().await;*/
-            let mut speed = None;
-            if EventType::WheelFront == event_type || EventType::WheelBack == event_type {
-                speed = Some(ms);
-            }
 
-            (listener.callback)(EventInfo{ptr:listener.ptr, speed  }).await;
+            (listener.callback)(EventInfo{ptr:listener.ptr,rotate_state: None  }).await;
 
         }
     }
 
 }
 
+
+pub async fn ec11_toggle_event(event_type: EventType,rotate_state:RotateState){
+
+    let mut vec = LISTENER.lock().await;
+    for mut listener in vec.iter_mut() {
+        if listener.event_type == event_type{
+            (listener.callback)(EventInfo{ptr:listener.ptr, rotate_state:Some(rotate_state)  }).await;
+        }
+    }
+
+}
 
 #[embassy_executor::task]
 pub async  fn run(mut key1:Gpio11<Input<PullUp>>,mut key2:Gpio5<Input<PullUp>>,

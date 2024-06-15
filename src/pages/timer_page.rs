@@ -35,9 +35,9 @@ use crate::wifi::use_wifi;
 use crate::worldtime::{CLOCK_SYNC_SUCCESS, get_clock};
 
 pub struct TimerPage {
-    begin_count:u32,
+    begin_count:i32,
     need_render:bool,
-    current_count:u32,
+    current_count:i32,
     starting:bool,
     finished:bool,
     running:bool,
@@ -47,10 +47,10 @@ pub struct TimerPage {
 
 impl TimerPage {
 
-    fn increase(&mut self) {
+    fn increase(&mut self,speed:f32) {
         if !self.starting {
             if self.current_count < 3600 * 2 {
-                self.current_count += 10;
+                self.current_count += (1.0*speed) as i32;
                 self.need_render = true;
             }else{
                 self.current_count = 3600 * 2;
@@ -59,12 +59,13 @@ impl TimerPage {
         }
     }
 
-    fn decrease(&mut self) {
+    fn decrease(&mut self,speed:f32) {
         if !self.starting {
-            if self.current_count > 10 {
-                self.current_count -= 10;
+            if self.current_count > 0 {
+                self.current_count -=  (1.0*speed) as i32;
                 self.need_render = true;
-            }else {
+            }
+            else {
                 self.current_count = 0;
                 self.need_render = true;
             }
@@ -151,7 +152,7 @@ impl Page for TimerPage {
             println!("current_page:" );
             return Box::pin(async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
-                mut_ref.decrease();
+                mut_ref.decrease(1.0);
                 println!("count_down_page:{}",mut_ref.current_count );
             });
         }).await;
@@ -159,7 +160,7 @@ impl Page for TimerPage {
             println!("current_page:" );
             return Box::pin(async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
-                mut_ref.increase();
+                mut_ref.increase(1.0);
                 println!("count_down_page:{}",mut_ref.current_count );
             });
         }).await;
@@ -187,7 +188,7 @@ impl Page for TimerPage {
             println!("current_page:" );
             return Box::pin( async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
-                mut_ref.increase();
+                mut_ref.increase(info.rotate_state.unwrap().speed());
             });
         }).await;
 
@@ -195,7 +196,7 @@ impl Page for TimerPage {
             println!("current_page:" );
             return Box::pin( async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
-                mut_ref.decrease();
+                mut_ref.decrease(info.rotate_state.unwrap().speed());
             });
         }).await;
     }
@@ -206,11 +207,11 @@ impl Page for TimerPage {
             if let Some(display) = display_mut() {
                 let _ = display.clear(TwoBitColor::White);
 
-                let second =  self.current_count%60;
+                let second =   self.current_count%60;
                 let minute = self.current_count / 60 % 60;
                 let hour = self.current_count / 3600;
 
-                let time = format!("{hour}:{minute}:{second}");
+                let time = format!("{:02}:{:02}:{:02}",hour,minute,second);
 
                 Self::draw_clock(display,time.as_str());
 

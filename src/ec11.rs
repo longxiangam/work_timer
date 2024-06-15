@@ -1,5 +1,7 @@
 
 use embassy_futures::select::{Either, select};
+use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
+use embassy_sync::mutex::Mutex;
 use embassy_time::{Instant};
 
 use embedded_hal_async::digital::Wait;
@@ -9,16 +11,75 @@ use hal::prelude::_embedded_hal_digital_v2_InputPin;
 
 
 use crate::ec11::WheelDirection::{Back, Front, NoState};
-use crate::event::{EventType, key_detection, toggle_event};
+use crate::event::{ec11_toggle_event, EventType, key_detection, toggle_event};
 
-#[derive(Eq, PartialEq)]
+#[derive(Eq, PartialEq,Debug,Copy, Clone)]
 enum WheelDirection{
     Front,
     Back,
     NoState,
 }
+//转动时判断方向是否一致，
+//一致则判断last_time是否过久，过久则重记时间
+//方向一致且时间不过久则步长加1 ，更新 last_time ,并用 步数 / 时间得到速度，
+#[derive(Eq, PartialEq,Debug,Copy, Clone)]
+pub struct RotateState {
+    pub begin_timestamp: u64,
+    pub last_timestamp: u64,
+    pub wheel_direction: WheelDirection,
+    pub steps: u32,
+}
+impl RotateState {
+    const fn new() -> Self {
+        RotateState {
+            begin_timestamp: 0,
+            last_timestamp: 0,
+            wheel_direction: WheelDirection::NoState,
+            steps: 0,
+        }
+    }
+
+
+    fn do_step(&mut self,wheel_direction: WheelDirection){
+
+        let ms = Instant::now().as_millis();
+        if self.wheel_direction == wheel_direction {
+            if ms - self.last_timestamp  < 200{
+                self.last_timestamp = ms;
+                self.steps += 1;
+                return;
+            }
+        }
+        self.wheel_direction = wheel_direction;
+        self.begin_timestamp = ms;
+        self.last_timestamp = ms;
+        self.steps = 1;
+
+    }
+
+    pub fn speed(&self)->f32{
+
+        if self.steps > 3 {
+            let speed = self.steps as f32 / (self.last_timestamp - self.begin_timestamp) as f32 * 1000.0;
+            println!("begin_time:{:?}",self.begin_timestamp);
+            println!("last_time:{:?}",self.last_timestamp);
+            println!("steps:{:?}",self.steps);
+            println!("speed:{:?}",speed);
+            return speed;
+        }else{
+            return self.steps as f32;
+        }
+
+    }
+}
+
+static ROTATE_STATE:Mutex<CriticalSectionRawMutex,RotateState> = Mutex::new(RotateState::new());
+
+
+
 const SAMPLE_TIMES:u32 = 10;
 const JUDGE_TIMES:u32 = 8;
+
 
 #[embassy_executor::task]
 pub async fn task(mut a_point :Gpio1<Input<PullUp>>,mut b_point :Gpio0<Input<PullUp>>,mut push_key:Gpio13<Input<PullUp>>){
@@ -77,11 +138,13 @@ pub async fn task(mut a_point :Gpio1<Input<PullUp>>,mut b_point :Gpio0<Input<Pul
                     //上升沿判断结束
                     if !b_is_down {
                         if begin_state == Front {
-                            toggle_event(EventType::WheelFront,Instant::now().as_millis()).await;
+                            ROTATE_STATE.lock().await.do_step(Front);
+                            ec11_toggle_event(EventType::WheelFront, ROTATE_STATE.lock().await.clone()).await;
                         }
                     }else if b_is_down {
                         if begin_state == Back {
-                            toggle_event(EventType::WheelBack,Instant::now().as_millis()).await;
+                            let speed = ROTATE_STATE.lock().await.do_step(Back);
+                            ec11_toggle_event(EventType::WheelBack,ROTATE_STATE.lock().await.clone()).await;
                         }
                     }
                     begin_state = NoState;

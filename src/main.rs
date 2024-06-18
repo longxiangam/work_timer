@@ -229,6 +229,7 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
 
     }else {
         init_page.append_log("正在连接wifi").await;
+        Timer::after_millis(10).await;
         WIFI_MODEL.lock().await.replace(WifiModel::STA);
         let stack = connect_wifi(spawner,
                                  peripherals.SYSTIMER,
@@ -246,18 +247,16 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
     }
 
 
-    loop {
-        Timer::after_secs(100);
-    }
 
-  /*  loop {
+
+    loop {
         if let Some(clock) =  get_clock(){
             println!("Current_time: {}", clock.get_date_str().await);
         }
         //enter_deep(peripherals.LPWR, hal::Delay::new(clocks), core::time::Duration::from_secs(10));
         Timer::after(Duration::from_secs(10)).await;
 
-    }*/
+    }
 }
 
 

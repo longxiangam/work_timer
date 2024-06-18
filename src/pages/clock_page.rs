@@ -28,7 +28,7 @@ use crate::pages::{ Page};
 use crate::pages::main_page::MainPage;
 use crate::request::{RequestClient, ResponseData};
 use crate::wifi::{finish_wifi, use_wifi};
-use crate::worldtime::{CLOCK_SYNC_SUCCESS, get_clock};
+use crate::worldtime::{CLOCK_SYNC_TIME_SECOND, get_clock};
 
 pub struct ClockPage {
     begin_count:u32,
@@ -204,7 +204,7 @@ impl Page for ClockPage {
                     if let Some(e) =  &self.error {
                         let _ = Text::new(format!("加载失败,{}",e).as_str(), Point::new(0,50), style.clone()).draw(display);
                     }else{
-                        if *CLOCK_SYNC_SUCCESS.lock().await {
+                        if *CLOCK_SYNC_TIME_SECOND.lock().await > 0 {
                             if let Some(clock) = get_clock() {
                                 let local = clock.local().await;
                                 let hour = local.hour();

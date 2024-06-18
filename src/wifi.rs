@@ -1,5 +1,4 @@
 use alloc::string::ToString;
-use core::cell::RefCell;
 use core::net::Ipv4Addr;
 use core::ops::DerefMut;
 use core::str::{from_utf8, FromStr};
@@ -61,8 +60,8 @@ pub static mut IP_ADDRESS:String<20> = String::new();
 pub static STOP_WIFI_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 pub static RECONNECT_WIFI_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
-pub static LAST_USE_TIME_SECS:Mutex<CriticalSectionRawMutex,RefCell<u64>>  =  Mutex::new(RefCell::new(0));
-pub static WIFI_STATE:Mutex<CriticalSectionRawMutex,RefCell<WifiNetState>>  =  Mutex::new(RefCell::new(WifiNetState::WifiStopped));
+pub static LAST_USE_TIME_SECS:Mutex<CriticalSectionRawMutex,Option<u64>>  =  Mutex::new(None);
+pub static WIFI_STATE:Mutex<CriticalSectionRawMutex,Option<WifiNetState>>  =  Mutex::new(Some(WifiNetState::WifiStopped));
 pub static mut STACK_MUT: Option<&'static Stack<WifiDevice<'static, WifiStaDevice>>>  =  None;
 pub static mut AP_STACK_MUT: Option<&'static Stack<WifiDevice<'static, WifiApDevice>>>  =  None;
 
@@ -263,10 +262,10 @@ static WIFI_LOCK:Mutex<CriticalSectionRawMutex,bool> = Mutex::new(false);
 pub async fn use_wifi() ->Result<&'static Stack<WifiDevice<'static, WifiStaDevice>>, WifiNetError>{
     let secs = Instant::now().as_secs();
 
-    if *WIFI_STATE.lock().await.get_mut() != WifiNetState::WifiConnected {
+    if WIFI_STATE.lock().await.unwrap() != WifiNetState::WifiConnected {
         println!("need wait");
     }
-    if *WIFI_STATE.lock().await.get_mut() == WifiNetState::WifiStopped {
+    if WIFI_STATE.lock().await.unwrap() == WifiNetState::WifiStopped {
         println!("send reconnect signal...");
         RECONNECT_WIFI_SIGNAL.signal(());
     }
@@ -315,8 +314,8 @@ pub async fn finish_wifi(){
 async fn do_stop(){
     loop {
 
-        if  *WIFI_STATE.lock().await.get_mut() == WifiNetState::WifiConnected {
-            if Instant::now().as_secs() - *LAST_USE_TIME_SECS.lock().await.get_mut() > HOW_LONG_SECS_CLOSE {
+        if  WIFI_STATE.lock().await.unwrap() == WifiNetState::WifiConnected {
+            if Instant::now().as_secs() - LAST_USE_TIME_SECS.lock().await.unwrap() > HOW_LONG_SECS_CLOSE {
                 println!("do_stop_wifi");
                 STOP_WIFI_SIGNAL.signal(());
                 finish_wifi().await;
@@ -326,7 +325,19 @@ async fn do_stop(){
     }
 }
 
-
+pub async fn force_stop_wifi(){
+    if  WIFI_STATE.lock().await.unwrap() == WifiNetState::WifiStopped {
+        return;
+    }else{
+        STOP_WIFI_SIGNAL.signal(());
+        loop {
+            if  WIFI_STATE.lock().await.unwrap() == WifiNetState::WifiStopped {
+                return;
+            }
+            Timer::after(Duration::from_millis(50)).await
+        }
+    }
+}
 
 /// ap 模式 配网
 pub async fn start_wifi_ap(spawner: &Spawner,

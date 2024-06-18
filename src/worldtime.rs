@@ -3,6 +3,7 @@
 use alloc::string::String;
 
 use core::fmt::Write;
+use core::ops::Add;
 use embassy_futures::select::{Either, select};
 
 use embassy_net::{
@@ -15,9 +16,10 @@ use embassy_time::{Instant, Timer};
 use esp_println::println;
 use esp_wifi::wifi::ipv4::{IpAddr, Ipv4Addr, SocketAddr, ToSocketAddrs};
 use esp_wifi::wifi::{WifiDevice, WifiStaDevice};
+use hal::prelude::ram;
 
 use sntpc::{async_impl::{get_time,NtpUdpSocket }, NtpContext, NtpTimestampGenerator };
-use static_cell::make_static;
+use static_cell::{make_static, StaticCell};
 use time::{Duration, OffsetDateTime, UtcOffset, Weekday};
 use crate::wifi::{finish_wifi, use_wifi};
 
@@ -250,9 +252,16 @@ pub async fn ntp_request(
         }
     }
 }
+#[ram(rtc_fast)]
+pub static mut BOOT_SECOND:i64 = 0;
+
+
 
 pub static mut CLOCK: Option<&'static Clock>  =  None;
-pub static CLOCK_SYNC_SUCCESS:Mutex<CriticalSectionRawMutex,bool>   =  Mutex::new(false);
+
+pub static CLOCK_CELL: StaticCell<Clock>  =  StaticCell::new();
+
+pub static CLOCK_SYNC_TIME_SECOND:Mutex<CriticalSectionRawMutex,u64>   =  Mutex::new(0);
 
 pub fn get_clock()->Option<&'static Clock>{
     unsafe {
@@ -263,35 +272,60 @@ pub fn get_clock()->Option<&'static Clock>{
 
 #[embassy_executor::task]
 pub async fn ntp_worker() {
-    let clock = make_static!(Clock::new());
+    let clock = CLOCK_CELL.init(Clock::new());
     unsafe {
-        CLOCK.replace(&*clock);
+        CLOCK.replace(clock);
+    }
+
+    //rtc 是否保存了启动时间
+    unsafe {
+        if BOOT_SECOND > 0 {
+            let boot_time =
+                OffsetDateTime::from_unix_timestamp(BOOT_SECOND).unwrap();
+            let now = boot_time.add( Duration::milliseconds(Instant::now().as_millis() as i64));
+            clock.set_time(now).await;
+        }
     }
     loop {
-        let sleep_sec =  match use_wifi().await{
-            Ok(stack) =>{
-                println!("NTP Request");
-                match ntp_request(stack, clock).await {
-                    Err(_) => {
-                        finish_wifi().await;
-                        println!("NTP error response");
-                        5
-                    }
-                    Ok(_) => {
-                        finish_wifi().await;
-                        println!("NTP ok ?");
-                        let mut sync_success = CLOCK_SYNC_SUCCESS.lock().await;
-                        *sync_success = true;
-                        3600
-                    },
-                }
-            }
-            Err(e) => {
-                println!("get stack err:{:?}",e);
-                5
-            }
-        };
+        let mut sleep_sec = 3600;
+        //判断同步时间 12 小时
+        if Instant::now().duration_since(Instant::from_secs(*CLOCK_SYNC_TIME_SECOND.lock().await)).as_secs() > 12 * 3600
+            ||  *CLOCK_SYNC_TIME_SECOND.lock().await == 0 {
+            match use_wifi().await {
+                Ok(stack) => {
+                    println!("NTP Request");
 
+                    match ntp_request(stack, get_clock().unwrap()).await {
+                        Err(_) => {
+                            finish_wifi().await;
+                            println!("NTP error response");
+                            sleep_sec = 5;
+                        }
+                        Ok(_) => {
+                            finish_wifi().await;
+                            println!("NTP ok ?");
+                            let mut sync_time_second = CLOCK_SYNC_TIME_SECOND.lock().await;
+                            *sync_time_second = Instant::now().as_secs();
+
+                            //同步后保存启动时时间
+                            unsafe {
+                                BOOT_SECOND = clock.local().await
+                                    .checked_sub(Duration::milliseconds(Instant::now().as_millis() as i64)).unwrap().millisecond() as i64;
+                            }
+
+
+                            sleep_sec = 3600;
+                        },
+                    }
+                }
+                Err(e) => {
+                    println!("get stack err:{:?}", e);
+                    sleep_sec = 5;
+                }
+            };
+        }else{
+            sleep_sec = 3600;
+        }
 
         embassy_time::Timer::after(embassy_time::Duration::from_secs(sleep_sec)).await;
     }

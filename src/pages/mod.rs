@@ -10,7 +10,7 @@ mod timer_page;
 mod weather_page;
 mod calendar_page;
 pub(crate) mod setting_page;
-mod init_page;
+pub mod init_page;
 
 
 enum PageEnum {

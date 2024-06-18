@@ -19,9 +19,10 @@ use u8g2_fonts::fonts;
 use crate::display::{display_mut, RENDER_CHANNEL, RenderInfo};
 use crate::event;
 use crate::event::EventType;
+use crate::sleep::{refresh_active_time, to_sleep};
 use crate::widgets::calendar::Calendar;
 use crate::widgets::clock_widget::ClockWidget;
-use crate::worldtime::{CLOCK_SYNC_SUCCESS, get_clock};
+use crate::worldtime::{CLOCK_SYNC_TIME_SECOND, get_clock};
 
 pub struct CalendarPage {
     running:bool,
@@ -50,7 +51,7 @@ impl Page for CalendarPage {
             if let Some(display) = display_mut() {
                 let _ = display.clear(TwoBitColor::White);
 
-                if *CLOCK_SYNC_SUCCESS.lock().await {
+                if *CLOCK_SYNC_TIME_SECOND.lock().await > 0 {
                     if let Some(clock) = get_clock() {
 
                         let local = clock.local().await;
@@ -83,7 +84,7 @@ impl Page for CalendarPage {
 
     async fn run(&mut self, spawner: Spawner) {
         self.running = true;
-
+        refresh_active_time().await;
         loop {
             if !self.running {
                 break;
@@ -91,6 +92,8 @@ impl Page for CalendarPage {
 
             self.need_render = true;
             self.render().await;
+
+            to_sleep(Duration::from_secs(0),Duration::from_secs(10)).await;
             Timer::after(Duration::from_millis(50)).await;
         }
     }
@@ -101,6 +104,14 @@ impl Page for CalendarPage {
             return Box::pin(async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
                 mut_ref.back().await;
+            });
+        }).await;
+
+
+        event::on_target(EventType::KeyShort(1),Self::mut_to_ptr(self),  move |info|  {
+            return Box::pin(async move {
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
+                refresh_active_time().await;
             });
         }).await;
     }

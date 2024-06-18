@@ -23,9 +23,9 @@ mod model;
 mod weather;
 mod storage;
 pub mod web_service;
+mod sleep;
 
 use alloc::string::ToString;
-use core::cell::RefCell;
 use core::convert::Infallible;
 use core::{mem, ptr};
 use core::mem::size_of;
@@ -47,7 +47,7 @@ use esp_println::{print, println};
 use esp_wifi::wifi::{WifiController, WifiDevice, WifiEvent, WifiStaDevice, WifiState};
 use esp_wifi::{initialize, EspWifiInitFor};
 use hal::clock::{Clock, ClockControl, Clocks};
-use hal::{Rng, Rtc};
+use hal::{Cpu, Rng, Rtc};
 use hal::{embassy, peripherals::Peripherals, prelude::*, timer::TimerGroup,dma_descriptors,
           spi::{ master::{prelude::*, Spi}, SpiMode,  }, dma::Dma,gpio::IO};
 use hal::adc::{AdcConfig, Attenuation,ADC};
@@ -57,12 +57,14 @@ use static_cell::{make_static, StaticCell};
 use hal::dma::{DmaDescriptor, DmaPriority};
 use hal::dma::Channel0;
 
-use hal::gpio::{Gpio11, Gpio12, Gpio13, Gpio18, Gpio19, Gpio4, Gpio5, Gpio8, Gpio9, Input, NO_PIN, OpenDrain, Output, PullUp};
+use hal::gpio::{Gpio11, Gpio12, Gpio13, Gpio18, Gpio19, Gpio4, Gpio5, Gpio8, Gpio9, Input, NO_PIN, OpenDrain, Output, PullUp, RTCPinWithResistors};
 use hal::ledc::{channel, LEDC, LowSpeed, LSGlobalClkSource, timer};
+use hal::peripheral::Peripheral;
 use hal::reset::software_reset;
 use hal::riscv::_export::critical_section::Mutex;
 use hal::riscv::_export::critical_section;
-use hal::rtc_cntl::sleep::TimerWakeupSource;
+use hal::rtc_cntl::{get_reset_reason, get_wakeup_cause, SocResetReason};
+use hal::rtc_cntl::sleep::{RtcioWakeupSource, TimerWakeupSource, WakeupLevel};
 
 use hal::spi::FullDuplexMode;
 use hal::spi::master::dma::SpiDma;
@@ -73,6 +75,8 @@ use lcd_drivers::color::TwoBitColor;
 use log::info;
 
 use crate::pages::{ Page};
+use crate::pages::init_page::InitPage;
+use crate::sleep::{add_rtcio, refresh_active_time, RTC_MANGE, to_sleep, WAKEUP_PINS};
 use crate::storage::{enter_process, NvsStorage, read_flash, WIFI_INFO, WifiStorage, write_flash};
 use crate::weather::weather_worker;
 use crate::wifi::{connect_wifi, start_wifi_ap, WIFI_MODEL, WifiModel};
@@ -88,7 +92,7 @@ static DESCRIPTORS: StaticCell<[DmaDescriptor; DESCRIPTORS_SIZE]> = StaticCell::
 /// RX descriptors for SPI DMA
 static RX_DESCRIPTORS: StaticCell<[DmaDescriptor; DESCRIPTORS_SIZE]> = StaticCell::new();
 static CHANNEL: Channel<CriticalSectionRawMutex, (bool,bool), 64> = Channel::new();
-
+pub static mut CLOCKS_REF: Option<&'static Clocks>  =  None;
 
 #[main]
 async fn main(spawner: Spawner) {
@@ -108,7 +112,15 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
     let system = peripherals.SYSTEM.split();
     let clocks  = &*make_static!( ClockControl::max(system.clock_control).freeze());
 
-
+    let mut rtc = Rtc::new(peripherals.LPWR);
+    RTC_MANGE.lock().await.replace(rtc);
+    unsafe {
+        CLOCKS_REF.replace(clocks);
+    }
+    let reason = get_reset_reason(Cpu::ProCpu).unwrap_or(SocResetReason::ChipPowerOn);
+    println!("reset reason: {:?}", reason);
+    let wake_reason = get_wakeup_cause();
+    println!("wake reason: {:?}", wake_reason);
 
     let timer_group0 = TimerGroup::new(peripherals.TIMG0, &clocks);
     embassy::init(&clocks, timer_group0);
@@ -149,15 +161,25 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
 
     spawner.spawn(crate::display::render(spi_dma,epd_cs,epd_rst,epd_dc)).ok();
 
+    let mut init_page = InitPage::new();
 
-    let a_point = io.pins.gpio1.into_pull_up_input();
-    let b_point = io.pins.gpio0.into_pull_up_input();
 
-    let key1 = io.pins.gpio11.into_pull_up_input();
-    let key2 = io.pins.gpio5.into_pull_up_input();
+    let mut a_point = io.pins.gpio1.into_pull_up_input();
+    let mut b_point = io.pins.gpio0.into_pull_up_input();
+
+    let mut key1 = io.pins.gpio11.into_pull_up_input();
+    let mut key2 = io.pins.gpio5.into_pull_up_input();
     let key3 = io.pins.gpio8.into_pull_up_input();
     let key4 = io.pins.gpio9.into_pull_up_input();
     let key_ec11 = io.pins.gpio13.into_pull_up_input();
+
+    let rtc_io_2 = make_static!(unsafe{ key2.clone_unchecked()});
+    let rtc_io_a = make_static!(unsafe{ a_point.clone_unchecked()});
+    let rtc_io_b = make_static!(unsafe{ b_point.clone_unchecked()});
+
+    add_rtcio( rtc_io_2,  WakeupLevel::Low).await;
+    add_rtcio( rtc_io_a,  WakeupLevel::Low).await;
+    add_rtcio( rtc_io_b,  WakeupLevel::Low).await;
 
     spawner.spawn(ec11::task(a_point,b_point,key_ec11)).ok();
 
@@ -167,6 +189,15 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
 
     //连接wifi
     let mut need_ap = false;
+    refresh_active_time().await;
+/*    //测试sleep
+    loop {
+
+        to_sleep(Duration::from_secs(0),Duration::from_secs(5)).await;
+
+        Timer::after(Duration::from_secs(1)).await;
+    }*/
+
 
 
     loop {
@@ -197,6 +228,7 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
         }
 
     }else {
+        init_page.append_log("正在连接wifi").await;
         WIFI_MODEL.lock().await.replace(WifiModel::STA);
         let stack = connect_wifi(spawner,
                                  peripherals.SYSTIMER,
@@ -204,25 +236,28 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
                                  peripherals.WIFI,
                                  system.radio_clock_control,
                                  clocks).await;
-
+        init_page.append_log("已连接wifi").await;
         spawner.spawn(ntp_worker()).ok();
         spawner.spawn(weather_worker()).ok();
+
+        //init_page.run(spawner.clone()).await;
+
         spawner.spawn(pages::main_task(spawner.clone())).ok();
     }
-    loop {
 
+
+    loop {
+        Timer::after_secs(100);
+    }
+
+  /*  loop {
         if let Some(clock) =  get_clock(){
             println!("Current_time: {}", clock.get_date_str().await);
         }
         //enter_deep(peripherals.LPWR, hal::Delay::new(clocks), core::time::Duration::from_secs(10));
         Timer::after(Duration::from_secs(10)).await;
 
-    }
-
-
-
-
-
+    }*/
 }
 
 

@@ -1,7 +1,6 @@
 use alloc::boxed::Box;
 use heapless::String;
 use heapless::Vec;
-use core::cell::RefCell;
 use core::str::FromStr;
 use embassy_executor::Spawner;
 use embassy_futures::select::{Either, select, };
@@ -30,7 +29,7 @@ use crate::pages::timer_page::TimerPage;
 use crate::pages::weather_page::WeatherPage;
 use crate::widgets::list_widget::ListWidget;
 
-static MAIN_PAGE:Mutex<CriticalSectionRawMutex,RefCell<Option<MainPage>> > = Mutex::new(RefCell::new(None));
+static MAIN_PAGE:Mutex<CriticalSectionRawMutex,Option<MainPage> > = Mutex::new(None);
 pub static MAIN_PAGE_CHANNEL: Channel<CriticalSectionRawMutex,MainPageInfo, 64> = Channel::new();
 
 pub struct MainPageInfo{
@@ -52,18 +51,15 @@ pub struct MainPage{
 impl MainPage {
 
     pub async fn init(spawner: Spawner){
-        MAIN_PAGE.lock().await.get_mut().replace(MainPage::new());
+        MAIN_PAGE.lock().await.replace(MainPage::new());
         spawner.spawn(increase()).ok();
         spawner.spawn(decrease()).ok();
-        Self::bind_event(MAIN_PAGE.lock().await.get_mut().as_mut().unwrap()).await;
+        Self::bind_event(MAIN_PAGE.lock().await.as_mut().unwrap()).await;
     }
 
     pub async fn get_mut() -> Option<&'static mut MainPage> {
         unsafe {
-            // 一个 u64 值，假设它是一个有效的指针地址
-
-            // 将 u64 转换为指针类型
-            let ptr: *mut MainPage =  MAIN_PAGE.lock().await.borrow_mut().as_mut().unwrap()  as *mut MainPage;
+            let ptr: *mut MainPage =  MAIN_PAGE.lock().await.as_mut().unwrap()  as *mut MainPage;
             return Some(&mut *ptr);
         }
     }
@@ -101,12 +97,6 @@ impl Page for  MainPage{
         menus.push(MenuItem::new(String::<20>::from_str("游戏").unwrap(), EChip8Page));
         menus.push(MenuItem::new(String::<20>::from_str("二维码").unwrap(), ESettingPage));
 
-       /*     MenuItem::new(String::from_str("时钟"), EClockPage),
-            MenuItem::new("定时器".to_string(), ETimerPage),
-            MenuItem::new("天气".to_string(), EWeatherPage),
-            MenuItem::new("日历".to_string(), ECalenderPage),
-            MenuItem::new("游戏".to_string(), EChip8Page),
-        */
         Self{
             current_page:None,
             choose_index:0,

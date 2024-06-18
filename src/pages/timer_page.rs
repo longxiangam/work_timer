@@ -1,7 +1,6 @@
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
-use core::cell::RefCell;
 use core::fmt::Debug;
 use core::future::Future;
 use eg_seven_segment::SevenSegmentStyleBuilder;
@@ -32,7 +31,7 @@ use crate::pages::{ Page};
 use crate::pages::main_page::MainPage;
 use crate::request::{RequestClient, ResponseData};
 use crate::wifi::use_wifi;
-use crate::worldtime::{CLOCK_SYNC_SUCCESS, get_clock};
+use crate::worldtime::{CLOCK_SYNC_TIME_SECOND, get_clock};
 
 pub struct TimerPage {
     begin_count:i32,
@@ -48,6 +47,8 @@ pub struct TimerPage {
 impl TimerPage {
 
     fn increase(&mut self,speed:f32) {
+        self.finished = false;
+
         if !self.starting {
             if self.current_count < 3600 * 2 {
                 self.current_count += (1.0*speed) as i32;
@@ -60,6 +61,7 @@ impl TimerPage {
     }
 
     fn decrease(&mut self,speed:f32) {
+        self.finished = false;
         if !self.starting {
             if self.current_count > 0 {
                 self.current_count -=  (1.0*speed) as i32;
@@ -96,6 +98,7 @@ impl TimerPage {
     }
 
     fn toggle_starting(&mut self){
+        self.finished = false;
         if self.starting {
             self.starting = false;
         }else{
@@ -207,6 +210,13 @@ impl Page for TimerPage {
             if let Some(display) = display_mut() {
                 let _ = display.clear(TwoBitColor::White);
 
+                if self.finished {
+                    //闪烁一下
+                    if Instant::now().as_secs() % 2 == 0 {
+                        RENDER_CHANNEL.send(RenderInfo { time: 0 }).await;
+                        return;
+                    }
+                }
                 let second =   self.current_count%60;
                 let minute = self.current_count / 60 % 60;
                 let hour = self.current_count / 3600;

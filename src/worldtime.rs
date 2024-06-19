@@ -282,7 +282,10 @@ pub async fn ntp_worker() {
     unsafe {
         CLOCK.replace(clock);
     }
-
+    let mut init_page = InitPage::new();
+    init_page.append_log("开始同步时间").await;
+    init_page.append_log(format!("BOOT_SECOND:{}",unsafe{BOOT_SECOND}).as_str()).await;;
+    init_page.append_log(format!("CLOCK_SYNC_TIME_SECOND:{}",unsafe{CLOCK_SYNC_TIME_SECOND}).as_str()).await;;
     //rtc 是否保存了启动时间
     unsafe {
         if BOOT_SECOND > 0 {
@@ -318,7 +321,7 @@ pub async fn ntp_worker() {
                             //同步后保存启动时时间
                             unsafe {
                                 BOOT_SECOND = clock.local().await
-                                    .checked_sub(Duration::milliseconds(Instant::now().as_millis() as i64)).unwrap().millisecond() as i64;
+                                    .checked_sub(Duration::milliseconds(Instant::now().as_millis() as i64)).unwrap().unix_timestamp() ;
                             }
 
 

@@ -253,7 +253,6 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
         if let Some(clock) =  get_clock(){
             println!("Current_time: {}", clock.get_date_str().await);
         }
-        //enter_deep(peripherals.LPWR, hal::Delay::new(clocks), core::time::Duration::from_secs(10));
         Timer::after(Duration::from_secs(10)).await;
 
     }

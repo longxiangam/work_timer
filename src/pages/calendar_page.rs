@@ -22,7 +22,7 @@ use crate::event::EventType;
 use crate::sleep::{refresh_active_time, to_sleep};
 use crate::widgets::calendar::Calendar;
 use crate::widgets::clock_widget::ClockWidget;
-use crate::worldtime::{CLOCK_SYNC_TIME_SECOND, get_clock};
+use crate::worldtime::{ get_clock, sync_time_success};
 
 pub struct CalendarPage {
     running:bool,
@@ -51,7 +51,7 @@ impl Page for CalendarPage {
             if let Some(display) = display_mut() {
                 let _ = display.clear(TwoBitColor::White);
 
-                if *CLOCK_SYNC_TIME_SECOND.lock().await > 0 {
+                if sync_time_success() {
                     if let Some(clock) = get_clock() {
 
                         let local = clock.local().await;
@@ -93,7 +93,7 @@ impl Page for CalendarPage {
             self.need_render = true;
             self.render().await;
 
-            to_sleep(Duration::from_secs(0),Duration::from_secs(10)).await;
+            to_sleep(Duration::from_secs(0),Duration::from_secs(5)).await;
             Timer::after(Duration::from_millis(50)).await;
         }
     }

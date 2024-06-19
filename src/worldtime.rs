@@ -1,5 +1,4 @@
-
-
+use alloc::format;
 use alloc::string::String;
 
 use core::fmt::Write;
@@ -21,6 +20,8 @@ use hal::prelude::ram;
 use sntpc::{async_impl::{get_time,NtpUdpSocket }, NtpContext, NtpTimestampGenerator };
 use static_cell::{make_static, StaticCell};
 use time::{Duration, OffsetDateTime, UtcOffset, Weekday};
+use crate::pages::init_page::InitPage;
+use crate::pages::Page;
 use crate::wifi::{finish_wifi, use_wifi};
 
 
@@ -254,21 +255,26 @@ pub async fn ntp_request(
 }
 #[ram(rtc_fast)]
 pub static mut BOOT_SECOND:i64 = 0;
-
+#[ram(rtc_fast)]
+pub static mut CLOCK_SYNC_TIME_SECOND:u64   =  0;
 
 
 pub static mut CLOCK: Option<&'static Clock>  =  None;
 
 pub static CLOCK_CELL: StaticCell<Clock>  =  StaticCell::new();
 
-pub static CLOCK_SYNC_TIME_SECOND:Mutex<CriticalSectionRawMutex,u64>   =  Mutex::new(0);
+
 
 pub fn get_clock()->Option<&'static Clock>{
     unsafe {
         return CLOCK;
     }
 }
-
+pub fn sync_time_success()->bool{
+     unsafe {
+        CLOCK_SYNC_TIME_SECOND > 0
+    }
+}
 
 #[embassy_executor::task]
 pub async fn ntp_worker() {
@@ -288,9 +294,10 @@ pub async fn ntp_worker() {
     }
     loop {
         let mut sleep_sec = 3600;
+        let sync_time_second = unsafe{CLOCK_SYNC_TIME_SECOND};
         //判断同步时间 12 小时
-        if Instant::now().duration_since(Instant::from_secs(*CLOCK_SYNC_TIME_SECOND.lock().await)).as_secs() > 12 * 3600
-            ||  *CLOCK_SYNC_TIME_SECOND.lock().await == 0 {
+        if Instant::now().as_secs() - sync_time_second  > 3600
+            ||  sync_time_second == 0 {
             match use_wifi().await {
                 Ok(stack) => {
                     println!("NTP Request");
@@ -304,8 +311,9 @@ pub async fn ntp_worker() {
                         Ok(_) => {
                             finish_wifi().await;
                             println!("NTP ok ?");
-                            let mut sync_time_second = CLOCK_SYNC_TIME_SECOND.lock().await;
-                            *sync_time_second = Instant::now().as_secs();
+                            unsafe {
+                                CLOCK_SYNC_TIME_SECOND = Instant::now().as_secs();
+                            }
 
                             //同步后保存启动时时间
                             unsafe {

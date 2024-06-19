@@ -1,6 +1,6 @@
 use alloc::string::ToString;
 use core::net::Ipv4Addr;
-use core::ops::DerefMut;
+use core::ops::{Deref, DerefMut};
 use core::str::{from_utf8, FromStr};
 use dhcparse::dhcpv4::{Addr, DhcpOption, Encode, Encoder, Message};
 use dhcparse::v4_options;
@@ -33,7 +33,7 @@ pub enum WifiModel{
     AP,
     STA,
 }
-#[derive(Eq, PartialEq,Copy, Clone)]
+#[derive(Eq, PartialEq,Copy, Clone,Debug)]
 pub enum WifiNetState {
     WifiConnecting,
     WifiConnected,
@@ -61,7 +61,7 @@ pub static STOP_WIFI_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new()
 pub static RECONNECT_WIFI_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 
 pub static LAST_USE_TIME_SECS:Mutex<CriticalSectionRawMutex,Option<u64>>  =  Mutex::new(None);
-pub static WIFI_STATE:Mutex<CriticalSectionRawMutex,Option<WifiNetState>>  =  Mutex::new(Some(WifiNetState::WifiStopped));
+pub static WIFI_STATE:Mutex<CriticalSectionRawMutex,Option<WifiNetState>>  =  Mutex::new(None);
 pub static mut STACK_MUT: Option<&'static Stack<WifiDevice<'static, WifiStaDevice>>>  =  None;
 pub static mut AP_STACK_MUT: Option<&'static Stack<WifiDevice<'static, WifiApDevice>>>  =  None;
 
@@ -153,26 +153,6 @@ pub async fn connect_wifi(spawner: &Spawner,
     spawner.spawn(net_task(stack)).ok();
     spawner.spawn(do_stop()).ok();
 
-    loop {
-        println!("Waiting is_link_up...");
-        if stack.is_link_up() {
-            break;
-        }
-        Timer::after(Duration::from_millis(1000)).await;
-    }
-
-    println!("Waiting to get IP address...");
-    loop {
-        if let Some(config) = stack.config_v4() {
-            println!("Got IP: {}", config.address);
-            unsafe {
-                IP_ADDRESS =  config.address.address().to_string().parse().unwrap();
-            }
-            break;
-        }
-        Timer::after(Duration::from_millis(500)).await;
-    }
-
     unsafe {
         STACK_MUT = Some(stack);
     }
@@ -261,7 +241,9 @@ const TIME_OUT_SECS: u64 = 10;
 static WIFI_LOCK:Mutex<CriticalSectionRawMutex,bool> = Mutex::new(false);
 pub async fn use_wifi() ->Result<&'static Stack<WifiDevice<'static, WifiStaDevice>>, WifiNetError>{
     let secs = Instant::now().as_secs();
-
+    if *WIFI_STATE.lock().await == None {
+        return Err(WifiNetError::WaitConnecting);
+    }
     if WIFI_STATE.lock().await.unwrap() != WifiNetState::WifiConnected {
         println!("need wait");
     }
@@ -313,8 +295,7 @@ pub async fn finish_wifi(){
 #[embassy_executor::task]
 async fn do_stop(){
     loop {
-
-        if  WIFI_STATE.lock().await.unwrap() == WifiNetState::WifiConnected {
+        if  let Some(WifiNetState::WifiConnected)  = *WIFI_STATE.lock().await {
             if Instant::now().as_secs() - LAST_USE_TIME_SECS.lock().await.unwrap() > HOW_LONG_SECS_CLOSE {
                 println!("do_stop_wifi");
                 STOP_WIFI_SIGNAL.signal(());
@@ -326,6 +307,10 @@ async fn do_stop(){
 }
 
 pub async fn force_stop_wifi(){
+    if *WIFI_STATE.lock().await == None {
+        return;
+    }
+
     if  WIFI_STATE.lock().await.unwrap() == WifiNetState::WifiStopped {
         return;
     }else{

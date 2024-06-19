@@ -26,7 +26,7 @@ use crate::pages::Page;
 use crate::request::RequestClient;
 use crate::weather::{get_weather, WEATHER_SYNC_SUCCESS};
 use crate::wifi::{finish_wifi, use_wifi};
-use crate::worldtime::{CLOCK_SYNC_TIME_SECOND, get_clock};
+use crate::worldtime::{get_clock, sync_time_success};
 
 
 pub struct WeatherPage{
@@ -112,7 +112,7 @@ impl Page for  WeatherPage{
                     }
 
                 }
-                if *CLOCK_SYNC_TIME_SECOND.lock().await > 0 {
+                if sync_time_success() {
                     if let Some(clock) = get_clock() {
                         let local = clock.local().await;
                         let hour = local.hour();

@@ -25,23 +25,28 @@ pub struct InitPage{
 
 impl InitPage{
     pub async fn append_log(&mut self, str:&str){
-        if let Some(display) = display_mut() {
-            if(self.top == 10){
-                let _ = display.clear(TwoBitColor::White);
+        loop {
+            if let Some(display) = display_mut() {
+                println!("append_log display");
+                if (self.top == 0) {
+                    let _ = display.clear(TwoBitColor::White);
+                }
+                let rect = Rectangle::new(Point::new(0, self.top)
+                                          , Size::new(display.size().width, 20));
+                let font: FontRenderer = FontRenderer::new::<fonts::u8g2_font_wqy16_t_gb2312>();
+                let _ = font.render_aligned(
+                    str,
+                    rect.center(),
+                    VerticalPosition::Center,
+                    HorizontalAlignment::Center,
+                    FontColor::Transparent(TwoBitColor::Black),
+                    display,
+                );
+                self.top += 20;
+                RENDER_CHANNEL.send(RenderInfo { time: 0 }).await;
+                break;
             }
-            let rect = Rectangle::new(Point::new(0, self.top)
-                                      , Size::new(display.size().width, 20));
-            let font: FontRenderer = FontRenderer::new::<fonts::u8g2_font_wqy16_t_gb2312>();
-            let _ = font.render_aligned(
-                str,
-                rect.center(),
-                VerticalPosition::Center,
-                HorizontalAlignment::Center,
-                FontColor::Transparent(TwoBitColor::Black),
-                display,
-            );
-            self.top += 20;
-            RENDER_CHANNEL.send(RenderInfo { time: 0 }).await;
+            Timer::after_millis(10).await;
         }
     }
 }
@@ -49,7 +54,7 @@ impl InitPage{
 impl Page for InitPage{
     fn new() -> Self {
         Self{
-            top: 10,
+            top: 0,
         }
     }
 

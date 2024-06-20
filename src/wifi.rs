@@ -59,7 +59,7 @@ const HOW_LONG_SECS_CLOSE:u64 = 30;//20秒未使用wifi 断开
 pub static mut IP_ADDRESS:String<20> = String::new();
 pub static STOP_WIFI_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 pub static RECONNECT_WIFI_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
-
+pub static REINIT_WIFI_SIGNAL: Signal<CriticalSectionRawMutex, ()> = Signal::new();
 pub static LAST_USE_TIME_SECS:Mutex<CriticalSectionRawMutex,Option<u64>>  =  Mutex::new(None);
 pub static WIFI_STATE:Mutex<CriticalSectionRawMutex,Option<WifiNetState>>  =  Mutex::new(None);
 pub static mut STACK_MUT: Option<&'static Stack<WifiDevice<'static, WifiStaDevice>>>  =  None;
@@ -74,7 +74,7 @@ pub async fn connect_wifi(spawner: &Spawner,
                           radio_clock_control: RadioClockControl,
                           clocks: &Clocks<'_> )
     -> Result<&'static Stack<WifiDevice<'static, WifiStaDevice>>, WifiNetError> {
-
+    REINIT_WIFI_SIGNAL.wait().await;
     HAL_RNG.lock().await.replace(rng);
 
     let timer = hal::systimer::SystemTimer::new(systimer).alarm0;
@@ -242,7 +242,14 @@ static WIFI_LOCK:Mutex<CriticalSectionRawMutex,bool> = Mutex::new(false);
 pub async fn use_wifi() ->Result<&'static Stack<WifiDevice<'static, WifiStaDevice>>, WifiNetError>{
     let secs = Instant::now().as_secs();
     if *WIFI_STATE.lock().await == None {
-        return Err(WifiNetError::WaitConnecting);
+        REINIT_WIFI_SIGNAL.signal(());
+        loop {
+            if *WIFI_STATE.lock().await != None { break; }
+            if Instant::now().as_secs() - secs > 3 {
+                return Err(WifiNetError::WaitConnecting);
+            }
+            Timer::after_millis(10).await;
+        }
     }
     if WIFI_STATE.lock().await.unwrap() != WifiNetState::WifiConnected {
         println!("need wait");

@@ -79,7 +79,7 @@ use crate::pages::init_page::InitPage;
 use crate::sleep::{add_rtcio, refresh_active_time, RTC_MANGE, to_sleep, WAKEUP_PINS};
 use crate::storage::{enter_process, NvsStorage, read_flash, WIFI_INFO, WifiStorage, write_flash};
 use crate::weather::weather_worker;
-use crate::wifi::{connect_wifi, start_wifi_ap, WIFI_MODEL, WifiModel};
+use crate::wifi::{connect_wifi, REINIT_WIFI_SIGNAL, start_wifi_ap, WIFI_MODEL, WifiModel};
 use crate::worldtime::{get_clock, ntp_worker};
 
 
@@ -231,12 +231,7 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
         init_page.append_log("正在连接wifi").await;
         Timer::after_millis(10).await;
         WIFI_MODEL.lock().await.replace(WifiModel::STA);
-        let stack = connect_wifi(spawner,
-                                 peripherals.SYSTIMER,
-                                 Rng::new(peripherals.RNG),
-                                 peripherals.WIFI,
-                                 system.radio_clock_control,
-                                 clocks).await;
+
         init_page.append_log("已连接wifi").await;
         spawner.spawn(ntp_worker()).ok();
         spawner.spawn(weather_worker()).ok();
@@ -244,6 +239,13 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
         //init_page.run(spawner.clone()).await;
 
         spawner.spawn(pages::main_task(spawner.clone())).ok();
+
+        let stack = connect_wifi(spawner,
+                                 peripherals.SYSTIMER,
+                                 Rng::new(peripherals.RNG),
+                                 peripherals.WIFI,
+                                 system.radio_clock_control,
+                                 clocks).await;
     }
 
 

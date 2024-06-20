@@ -22,6 +22,7 @@ use static_cell::{make_static, StaticCell};
 use time::{Duration, OffsetDateTime, UtcOffset, Weekday};
 use crate::pages::init_page::InitPage;
 use crate::pages::Page;
+use crate::sleep::{get_rtc_ms, get_sleep_ms};
 use crate::wifi::{finish_wifi, use_wifi};
 
 
@@ -254,7 +255,7 @@ pub async fn ntp_request(
     }
 }
 #[ram(rtc_fast)]
-pub static mut BOOT_SECOND:i64 = 0;
+pub static mut WHEN_SLEEP_TIME_TIMESTAMP:u64 = 0;
 #[ram(rtc_fast)]
 pub static mut CLOCK_SYNC_TIME_SECOND:u64   =  0;
 
@@ -276,6 +277,12 @@ pub fn sync_time_success()->bool{
     }
 }
 
+pub async fn save_time_to_rtc(){
+    unsafe {
+        WHEN_SLEEP_TIME_TIMESTAMP = get_clock().unwrap().now().await.unix_timestamp() as u64;
+    }
+}
+
 #[embassy_executor::task]
 pub async fn ntp_worker() {
     let clock = CLOCK_CELL.init(Clock::new());
@@ -284,27 +291,28 @@ pub async fn ntp_worker() {
     }
     let mut init_page = InitPage::new();
     init_page.append_log("开始同步时间").await;
-    init_page.append_log(format!("BOOT_SECOND:{}",unsafe{BOOT_SECOND}).as_str()).await;;
-    init_page.append_log(format!("CLOCK_SYNC_TIME_SECOND:{}",unsafe{CLOCK_SYNC_TIME_SECOND}).as_str()).await;;
+    Timer::after_secs(1).await;
     //rtc 是否保存了启动时间
     unsafe {
-        if BOOT_SECOND > 0 {
-            let boot_time =
-                OffsetDateTime::from_unix_timestamp(BOOT_SECOND).unwrap();
-            let now = boot_time.add( Duration::milliseconds(Instant::now().as_millis() as i64));
+        if WHEN_SLEEP_TIME_TIMESTAMP > 0 {
+            let current_second = WHEN_SLEEP_TIME_TIMESTAMP + get_sleep_ms().await  / 1000;
+            let now =
+                OffsetDateTime::from_unix_timestamp(current_second as i64).unwrap();
             clock.set_time(now).await;
+            init_page.append_log(format!("时间：{}:{}:{}",clock.local().await.hour(),clock.local().await.minute(),clock.local().await.second()).as_str()).await;
+            Timer::after_secs(5).await;
         }
     }
     loop {
         let mut sleep_sec = 3600;
         let sync_time_second = unsafe{CLOCK_SYNC_TIME_SECOND};
         //判断同步时间 12 小时
-        if Instant::now().as_secs() - sync_time_second  > 3600
+        if get_clock().unwrap().now().await.unix_timestamp() as u64 - sync_time_second  > 3600
             ||  sync_time_second == 0 {
             match use_wifi().await {
                 Ok(stack) => {
                     println!("NTP Request");
-
+                    init_page.append_log("NTP Request").await;
                     match ntp_request(stack, get_clock().unwrap()).await {
                         Err(_) => {
                             finish_wifi().await;
@@ -315,15 +323,8 @@ pub async fn ntp_worker() {
                             finish_wifi().await;
                             println!("NTP ok ?");
                             unsafe {
-                                CLOCK_SYNC_TIME_SECOND = Instant::now().as_secs();
+                                CLOCK_SYNC_TIME_SECOND =  get_clock().unwrap().now().await.unix_timestamp() as u64;
                             }
-
-                            //同步后保存启动时时间
-                            unsafe {
-                                BOOT_SECOND = clock.local().await
-                                    .checked_sub(Duration::milliseconds(Instant::now().as_millis() as i64)).unwrap().unix_timestamp() ;
-                            }
-
 
                             sleep_sec = 3600;
                         },

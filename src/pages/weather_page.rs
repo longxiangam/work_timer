@@ -183,7 +183,7 @@ impl Page for  WeatherPage{
         event::on_target(EventType::KeyShort(1), Self::mut_to_ptr(self), move |ptr| {
             return Box::pin(async move {
                 if let Some(weather) = get_weather() {
-                    weather.request().await.unwrap();
+                    weather.request().await;
                 }
             });
         }).await;

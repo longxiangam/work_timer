@@ -4,16 +4,20 @@ use embassy_time::{ Duration, Instant};
 use hal::peripherals::LPWR;
 use hal::{Delay, Rtc};
 use hal::gpio::{GpioPin, RTCPinWithResistors};
+use hal::macros::ram;
 use hal::rtc_cntl::sleep::{RtcioWakeupSource, TimerWakeupSource, WakeSource, WakeupLevel};
 use log::info;
 use heapless::Vec;
 
 use crate::CLOCKS_REF;
 use crate::wifi::{force_stop_wifi, STOP_WIFI_SIGNAL};
+use crate::worldtime::save_time_to_rtc;
 
 pub static RTC_MANGE:Mutex<CriticalSectionRawMutex,Option<Rtc>> = Mutex::new(None);
 pub static LAST_ACTIVE_TIME:Mutex<CriticalSectionRawMutex,Instant> = Mutex::new(Instant::MAX);
 pub static mut WAKEUP_PINS:  Vec<(&'static mut dyn RTCPinWithResistors, WakeupLevel),5> = Vec::new();
+#[ram(rtc_fast)]
+static mut WHEN_SLEEP_RTC_MS:u64 = 0;
 
 pub async fn refresh_active_time(){
      *LAST_ACTIVE_TIME.lock().await = Instant::now();
@@ -35,12 +39,23 @@ pub async fn to_sleep(sleep_time:Duration,idle_time:Duration){
             ws.push(&wakeup_source);
         }
 
+        unsafe {
+            WHEN_SLEEP_RTC_MS = get_rtc_ms().await;
+        }
+
+        save_time_to_rtc().await;
+
         let mut delay = Delay::new(unsafe{CLOCKS_REF.unwrap()});
         RTC_MANGE.lock().await.as_mut().unwrap().sleep_deep(ws.as_slice(), &mut delay);
 
     }
 }
-
+pub async fn get_rtc_ms()->u64{
+    RTC_MANGE.lock().await.as_mut().unwrap().get_time_ms()
+}
+pub async fn get_sleep_ms()->u64{
+    get_rtc_ms().await - unsafe{WHEN_SLEEP_RTC_MS}
+}
 
 pub async fn add_rtcio(rtcpin:&'static mut dyn RTCPinWithResistors, wakeup_level: WakeupLevel){
     unsafe {

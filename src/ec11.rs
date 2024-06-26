@@ -6,7 +6,7 @@ use embassy_time::{Instant};
 
 use embedded_hal_async::digital::Wait;
 use esp_println::{ println};
-use hal::gpio::{ Gpio0, Gpio1, Gpio13, Input,  PullUp};
+use hal::gpio::{Gpio0, Gpio1, Gpio13, Gpio5, Input, PullUp};
 use hal::prelude::_embedded_hal_digital_v2_InputPin;
 
 
@@ -40,11 +40,12 @@ impl RotateState {
     }
 
 
-    fn do_step(&mut self,wheel_direction: WheelDirection){
 
+    fn do_step(&mut self,wheel_direction: WheelDirection){
+        const SPEED_DELAY:u64= 300;
         let ms = Instant::now().as_millis();
         if self.wheel_direction == wheel_direction {
-            if ms - self.last_timestamp  < 200{
+            if ms - self.last_timestamp  < SPEED_DELAY{
                 self.last_timestamp = ms;
                 self.steps += 1;
                 return;
@@ -82,7 +83,7 @@ const JUDGE_TIMES:u32 = 8;
 
 
 #[embassy_executor::task]
-pub async fn task(mut a_point :Gpio1<Input<PullUp>>,mut b_point :Gpio0<Input<PullUp>>,mut push_key:Gpio13<Input<PullUp>>){
+pub async fn task(mut a_point :Gpio1<Input<PullUp>>,mut b_point :Gpio0<Input<PullUp>>,mut push_key:Gpio5<Input<PullUp>>){
     // 初始化编码器状态
 
     let mut begin_state = NoState;

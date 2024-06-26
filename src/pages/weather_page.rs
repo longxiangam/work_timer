@@ -18,13 +18,15 @@ use lcd_drivers::color::TwoBitColor;
 use u8g2_fonts::{FontRenderer, U8g2TextStyle};
 use u8g2_fonts::fonts;
 use u8g2_fonts::types::{FontColor, HorizontalAlignment, VerticalPosition};
+use crate::battery::{BATTERY, Battery};
 use crate::display::{display_mut, RENDER_CHANNEL, RenderInfo};
-use crate::event;
+use crate::{battery, event};
 use crate::event::EventType;
 use crate::model::seniverse::{DailyResult, form_json};
 use crate::pages::Page;
 use crate::request::RequestClient;
 use crate::weather::{get_weather, WEATHER_SYNC_SUCCESS};
+use crate::widgets::battery_widget::BatteryWidget;
 use crate::wifi::{finish_wifi, use_wifi};
 use crate::worldtime::{get_clock, sync_time_success};
 
@@ -87,6 +89,14 @@ impl Page for  WeatherPage{
 
                 let style =
                     U8g2TextStyle::new(fonts::u8g2_font_wqy12_t_gb2312b, TwoBitColor::Black);
+
+                if let Some(battery) = BATTERY.lock().await.as_ref() {
+                    let mut battery_widget = BatteryWidget::new(4200, Point::new((display.size().width - 20) as i32, 2), Size::new(20, 10)
+                                                            , TwoBitColor::Black, TwoBitColor::White);
+
+                    battery_widget.set_current_value(battery.percent);
+                    /*battery_widget.draw(display);*/
+                }
 
 
                 if *WEATHER_SYNC_SUCCESS.lock().await {

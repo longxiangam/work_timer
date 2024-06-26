@@ -4,7 +4,7 @@ use heapless::Vec;
 
 use core::future::Future;
 use core::pin::Pin;
-use embassy_futures::select::{ Either4, select4};
+use embassy_futures::select::{Either3, Either4, select3, select4};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use embassy_time::{Duration, Instant, Timer};
@@ -117,26 +117,22 @@ pub async fn ec11_toggle_event(event_type: EventType,rotate_state:RotateState){
 }
 
 #[embassy_executor::task]
-pub async  fn run(mut key1:Gpio11<Input<PullUp>>,mut key2:Gpio5<Input<PullUp>>,
-                  mut key3:Gpio8<Input<PullUp>>,mut key4:Gpio9<Input<PullUp>>, ){
+pub async  fn run(mut key1:Gpio11<Input<PullUp>>,mut key2:Gpio8<Input<PullUp>>,
+                  mut key3:Gpio9<Input<PullUp>>){
     loop {
 
         let key1_edge = key1.wait_for_falling_edge();
         let key2_edge = key2.wait_for_falling_edge();
         let key3_edge = key3.wait_for_falling_edge();
-        let key4_edge = key4.wait_for_falling_edge();
-        match  select4(key1_edge,key2_edge,key3_edge,key4_edge).await {
-            Either4::First(_) => {
+        match  select3(key1_edge,key2_edge,key3_edge).await {
+            Either3::First(_) => {
                 key_detection::<_,1>(&mut key1).await;
             }
-            Either4::Second(_) => {
+            Either3::Second(_) => {
                 key_detection::<_,2>(&mut key2).await;
             }
-            Either4::Third(_) => {
+            Either3::Third(_) => {
                 key_detection::<_,3>(&mut key3).await;
-            }
-            Either4::Fourth(_) => {
-                key_detection::<_,4>(&mut key4).await;
             }
         }
 
@@ -144,6 +140,13 @@ pub async  fn run(mut key1:Gpio11<Input<PullUp>>,mut key2:Gpio5<Input<PullUp>>,
     }
 }
 
+static  ENABLE_DOUBLE:Mutex<CriticalSectionRawMutex,bool> = Mutex::new(false);
+pub async fn enable_double_click(){
+    *ENABLE_DOUBLE.lock().await = true;
+}
+pub async fn disable_double_click(){
+    *ENABLE_DOUBLE.lock().await = false;
+}
 pub async fn key_detection<P,const NUM:usize>(key: &mut P)
 where P:InputPin
 {
@@ -151,12 +154,12 @@ where P:InputPin
     let mut is_long = false;
     loop {
         let mut is_low_times = 0;
-        for i in 0..10 {
+        for i in 0..100 {
             if key.is_low().unwrap() {
                 is_low_times += 1;
             }
         }
-        if is_low_times > 8 {
+        if is_low_times > 80 {
             //按下
             let current = Instant::now().as_millis();
             if current - begin_ms > 500 {
@@ -180,19 +183,23 @@ where P:InputPin
 
                 loop {
                     let current = Instant::now().as_millis();
+                    if(!*ENABLE_DOUBLE.lock().await){
+                        toggle_event(EventType::KeyShort(NUM as u32), current).await;
+                        return;
+                    }
                     if current - begin_ms > 400 {
                         toggle_event(EventType::KeyShort(NUM as u32), current).await;
                         return;
                     }
                     let mut is_low_times = 0;
-                    for i in 0..10 {
+                    for i in 0..100 {
                         if key.is_low().unwrap() {
                             is_low_times += 1;
                         }
                     }
 
                     //变低
-                    if is_low_times > 8{
+                    if is_low_times > 80{
                         toggle_event(EventType::KeyDouble(NUM as u32), current).await;
                         return;
                     }

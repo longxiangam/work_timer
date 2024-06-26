@@ -23,7 +23,8 @@ mod model;
 mod weather;
 mod storage;
 pub mod web_service;
-mod sleep;
+pub mod sleep;
+pub mod battery;
 
 use alloc::string::ToString;
 use core::convert::Infallible;
@@ -57,6 +58,7 @@ use static_cell::{make_static, StaticCell};
 use hal::dma::{DmaDescriptor, DmaPriority};
 use hal::dma::Channel0;
 
+
 use hal::gpio::{Gpio11, Gpio12, Gpio13, Gpio18, Gpio19, Gpio4, Gpio5, Gpio8, Gpio9, Input, NO_PIN, OpenDrain, Output, PullUp, RTCPinWithResistors};
 use hal::ledc::{channel, LEDC, LowSpeed, LSGlobalClkSource, timer};
 use hal::peripheral::Peripheral;
@@ -73,6 +75,7 @@ use hal::system::RadioClockControl;
 use heapless::String;
 use lcd_drivers::color::TwoBitColor;
 use log::info;
+use crate::battery::Battery;
 
 use crate::pages::{ Page};
 use crate::pages::init_page::InitPage;
@@ -97,12 +100,37 @@ pub static mut CLOCKS_REF: Option<&'static Clocks>  =  None;
 #[main]
 async fn main(spawner: Spawner) {
     alloc();
-
     if let Err(error) = main_fallible(&spawner).await {
         println!("Error while running firmware: {error:?}");
     }
+/*    if let Err(error) = main_fallible(&spawner).await {
+        println!("Error while running firmware: {error:?}");
+    }*/
 }
 
+async fn test_main(spawner: &Spawner)->Result<(),Error>{
+    let peripherals = Peripherals::take();
+
+    let system = peripherals.SYSTEM.split();
+    let clocks  = &*make_static!( ClockControl::max(system.clock_control).freeze());
+
+    let mut rtc = Rtc::new(peripherals.LPWR);
+    RTC_MANGE.lock().await.replace(rtc);
+    unsafe {
+        CLOCKS_REF.replace(clocks);
+    }
+    let reason = get_reset_reason(Cpu::ProCpu).unwrap_or(SocResetReason::ChipPowerOn);
+    println!("reset reason: {:?}", reason);
+    let wake_reason = get_wakeup_cause();
+    println!("wake reason: {:?}", wake_reason);
+
+    let timer_group0 = TimerGroup::new(peripherals.TIMG0, &clocks);
+    embassy::init(&clocks, timer_group0);
+    loop {
+        println!("enter test");
+        Timer::after_secs(1);
+    }
+}
 
 
 async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
@@ -168,12 +196,12 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
     let mut b_point = io.pins.gpio0.into_pull_up_input();
 
     let mut key1 = io.pins.gpio11.into_pull_up_input();
-    let mut key2 = io.pins.gpio5.into_pull_up_input();
-    let key3 = io.pins.gpio8.into_pull_up_input();
-    let key4 = io.pins.gpio9.into_pull_up_input();
-    let key_ec11 = io.pins.gpio13.into_pull_up_input();
+    let key2 = io.pins.gpio8.into_pull_up_input();
+    let key3 = io.pins.gpio9.into_pull_up_input();
+    let mut key_ec11 = io.pins.gpio5.into_pull_up_input();
+    let mut bat_adc = io.pins.gpio4.into_analog();
 
-    let rtc_io_2 = make_static!(unsafe{ key2.clone_unchecked()});
+    let rtc_io_2 = make_static!(unsafe{ key_ec11.clone_unchecked()});
     let rtc_io_a = make_static!(unsafe{ a_point.clone_unchecked()});
     let rtc_io_b = make_static!(unsafe{ b_point.clone_unchecked()});
 
@@ -184,9 +212,20 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
     spawner.spawn(ec11::task(a_point,b_point,key_ec11)).ok();
 
 
-    spawner.spawn(event::run(key1,key2,key3,key4)).ok();
+    spawner.spawn(event::run(key1,key2,key3)).ok();
 
+    //type AdcCal = hal::analog::adc::AdcCalBasic<hal::peripherals::ADC1>;
+    //type AdcCal = hal::analog::adc::AdcCalLine<ADC1>;
+    type AdcCal = hal::analog::adc::AdcCalCurve<ADC1>;
 
+    let mut adc1_config = AdcConfig::new();
+    let mut adc1_pin =
+        adc1_config.enable_pin_with_cal::<_, AdcCal>(bat_adc, Attenuation::Attenuation11dB);
+    let adc1 = ADC::new(peripherals.ADC1, adc1_config);
+    let battery = Battery::new(adc1);
+    battery::BATTERY.lock().await.replace(battery);
+    battery::ADC_PIN.lock().await.replace(adc1_pin);
+    spawner.spawn(crate::battery::test_bat_adc()).ok();
     //连接wifi
     let mut need_ap = false;
     refresh_active_time().await;

@@ -25,6 +25,7 @@ use u8g2_fonts::U8g2TextStyle;
 use u8g2_fonts::fonts;
 
 use crate::display::{display_mut, RENDER_CHANNEL, RenderInfo};
+use crate::ec11::RotateState;
 use crate::event;
 use crate::event::EventType;
 use crate::pages::{ Page};
@@ -51,7 +52,7 @@ impl TimerPage {
 
         if !self.starting {
             if self.current_count < 3600 * 2 {
-                self.current_count += (1.0*speed) as i32;
+                self.current_count += speed as i32;
                 self.need_render = true;
             }else{
                 self.current_count = 3600 * 2;
@@ -64,7 +65,7 @@ impl TimerPage {
         self.finished = false;
         if !self.starting {
             if self.current_count > 0 {
-                self.current_count -=  (1.0*speed) as i32;
+                self.current_count -=  speed as i32;
                 self.need_render = true;
             }
             else {
@@ -74,6 +75,24 @@ impl TimerPage {
         }
     }
 
+    fn speed( rotate_state:RotateState)->f32{
+        let mut speed = 10.0;
+        let step_speed = rotate_state.steps  as f32/ 2.0 * 10.0;
+        let time_speed = rotate_state.speed();
+        println!("state:{:?}",rotate_state);
+        println!("step_speed:{}",step_speed);
+        println!("time_speed:{}",time_speed);
+        println!("steps:{}",rotate_state.steps);
+        if rotate_state.steps > 10{
+            speed = 120.0;
+        } else if rotate_state.steps > 5 {
+            speed = 60.0;
+        }
+
+
+        println!("11 speed:{}",speed);
+        speed
+    }
     fn step(&mut self){
         if self.begin_count == 0 {
             //正
@@ -150,12 +169,26 @@ impl Page for TimerPage {
     }
     async fn bind_event(&mut self) {
         event::clear().await;
-
+        event::on_target(EventType::KeyShort(3),Self::mut_to_ptr(self),  move |info|  {
+            println!("current_page:" );
+            return Box::pin(async move {
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
+                mut_ref.toggle_starting();
+            });
+        }).await;
         event::on_target(EventType::KeyShort(2),Self::mut_to_ptr(self),  move |info|  {
             println!("current_page:" );
             return Box::pin(async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
-                mut_ref.decrease(1.0);
+                mut_ref.decrease(5.0);
+                println!("count_down_page:{}",mut_ref.current_count );
+            });
+        }).await;
+        event::on_target(EventType::KeyLongIng(2),Self::mut_to_ptr(self),  move |info|  {
+            println!("current_page:" );
+            return Box::pin(async move {
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
+                mut_ref.decrease(5.0);
                 println!("count_down_page:{}",mut_ref.current_count );
             });
         }).await;
@@ -163,25 +196,26 @@ impl Page for TimerPage {
             println!("current_page:" );
             return Box::pin(async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
-                mut_ref.increase(1.0);
+                mut_ref.increase(5.0);
+                println!("count_down_page:{}",mut_ref.current_count );
+            });
+        }).await;
+        event::on_target(EventType::KeyLongIng(1),Self::mut_to_ptr(self),  move |info|  {
+            println!("current_page:" );
+            return Box::pin(async move {
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
+                mut_ref.increase(5.0);
                 println!("count_down_page:{}",mut_ref.current_count );
             });
         }).await;
 
-        event::on_target(EventType::KeyShort(4),Self::mut_to_ptr(self),  move |info|  {
-            println!("current_page:" );
-            return Box::pin(async move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
-                mut_ref.back();
-                println!("count_down_page:{}",mut_ref.current_count );
-            });
-        }).await;
 
         event::on_target(EventType::KeyShort(5),Self::mut_to_ptr(self),  move |info|  {
             println!("current_page:" );
             return Box::pin(async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
-                mut_ref.toggle_starting();
+                mut_ref.back();
+
                 println!("count_down_page:{}",mut_ref.current_count );
             });
         }).await;
@@ -191,7 +225,7 @@ impl Page for TimerPage {
             println!("current_page:" );
             return Box::pin( async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
-                mut_ref.increase(info.rotate_state.unwrap().speed());
+                mut_ref.increase(Self::speed(info.rotate_state.unwrap()));
             });
         }).await;
 
@@ -199,7 +233,7 @@ impl Page for TimerPage {
             println!("current_page:" );
             return Box::pin( async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
-                mut_ref.decrease(info.rotate_state.unwrap().speed());
+                mut_ref.decrease(Self::speed(info.rotate_state.unwrap()));
             });
         }).await;
     }

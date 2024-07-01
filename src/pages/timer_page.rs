@@ -31,6 +31,7 @@ use crate::event::EventType;
 use crate::pages::{ Page};
 use crate::pages::main_page::MainPage;
 use crate::request::{RequestClient, ResponseData};
+use crate::sound::{player_buzzer, stop_buzzer};
 use crate::wifi::use_wifi;
 use crate::worldtime::{CLOCK_SYNC_TIME_SECOND, get_clock};
 
@@ -49,14 +50,12 @@ impl TimerPage {
 
     fn increase(&mut self,speed:f32) {
         self.finished = false;
-
+        self.need_render = true;
         if !self.starting {
             if self.current_count < 3600 * 2 {
                 self.current_count += speed as i32;
-                self.need_render = true;
             }else{
                 self.current_count = 3600 * 2;
-                self.need_render = true;
             }
         }
     }
@@ -66,11 +65,9 @@ impl TimerPage {
         if !self.starting {
             if self.current_count > 0 {
                 self.current_count -=  speed as i32;
-                self.need_render = true;
             }
             else {
                 self.current_count = 0;
-                self.need_render = true;
             }
         }
     }
@@ -93,7 +90,7 @@ impl TimerPage {
         println!("11 speed:{}",speed);
         speed
     }
-    fn step(&mut self){
+    async fn step(&mut self){
         if self.begin_count == 0 {
             //正
             self.current_count +=1;
@@ -106,6 +103,7 @@ impl TimerPage {
             }
             if self.current_count == 0 {
                 self.finished = true;
+                player_buzzer().await;
             }
         }
 
@@ -116,8 +114,13 @@ impl TimerPage {
         self.running = false;
     }
 
-    fn toggle_starting(&mut self){
-        self.finished = false;
+    async fn toggle_starting(&mut self){
+        if(self.finished) {
+            self.finished = false;
+            self.need_render = true;
+            stop_buzzer().await;
+        }
+
         if self.starting {
             self.starting = false;
         }else{
@@ -173,7 +176,7 @@ impl Page for TimerPage {
             println!("current_page:" );
             return Box::pin(async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
-                mut_ref.toggle_starting();
+                mut_ref.toggle_starting().await;
             });
         }).await;
         event::on_target(EventType::KeyShort(2),Self::mut_to_ptr(self),  move |info|  {
@@ -278,7 +281,7 @@ impl Page for TimerPage {
                 }
                 if Instant::now().as_secs() > last_time {
                     last_time = Instant::now().as_secs();
-                    self.step();
+                    self.step().await;
                 }
             }
 

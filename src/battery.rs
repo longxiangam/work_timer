@@ -42,7 +42,12 @@ pub async fn test_bat_adc(){
                         let max =  4100;
                         let min = 3200;
                         let current_v = max.min(v.voltage);
-                        v.percent = (current_v-3200)*100 / (4100 - 3200) ;
+                        let mut percent = (current_v-3200)*100 / (4100 - 3200) ;
+                        percent = percent.max(0);
+                        percent = percent.min(100);
+                        v.percent =  percent;
+
+                        println!("adc_value:{:?}",adc_value);
                         println!("current_v:{:?}",current_v);
                         println!("电量:{:?}",v.voltage);
                         println!("百分比:{:?}", v.percent);

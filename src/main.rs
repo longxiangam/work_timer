@@ -61,6 +61,7 @@ use hal::dma::Channel0;
 
 use hal::gpio::{Gpio11, Gpio12, Gpio13, Gpio18, Gpio19, Gpio4, Gpio5, Gpio8, Gpio9, Input, NO_PIN, OpenDrain, Output, PullUp, RTCPinWithResistors};
 use hal::ledc::{channel, LEDC, LowSpeed, LSGlobalClkSource, timer};
+use hal::ledc::timer::config::Duty::Duty8Bit;
 use hal::peripheral::Peripheral;
 use hal::reset::software_reset;
 use hal::riscv::_export::critical_section::Mutex;
@@ -80,6 +81,7 @@ use crate::battery::Battery;
 use crate::pages::{ Page};
 use crate::pages::init_page::InitPage;
 use crate::sleep::{add_rtcio, refresh_active_time, RTC_MANGE, to_sleep, WAKEUP_PINS};
+use crate::sound::{PWM_PLAYER, PwmPlayer, SoundType};
 use crate::storage::{enter_process, NvsStorage, read_flash, WIFI_INFO, WifiStorage, write_flash};
 use crate::weather::weather_worker;
 use crate::wifi::{connect_wifi, REINIT_WIFI_SIGNAL, start_wifi_ap, WIFI_MODEL, WifiModel};
@@ -162,6 +164,15 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
     enter_process().await;
     //spi
     let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
+    let mut buzzer = io.pins.gpio13.into_push_pull_output();
+    buzzer.set_low();
+
+    let mut pwm_player =  PwmPlayer::init(peripherals.LEDC, &clocks, buzzer);
+    unsafe {
+        PWM_PLAYER.replace(pwm_player);
+    }
+
+
 
     let epd_sclk = io.pins.gpio6;
     let epd_mosi = io.pins.gpio7;
@@ -200,6 +211,7 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
     let key3 = io.pins.gpio9.into_pull_up_input();
     let mut key_ec11 = io.pins.gpio5.into_pull_up_input();
     let mut bat_adc = io.pins.gpio4.into_analog();
+
 
     let rtc_io_2 = make_static!(unsafe{ key_ec11.clone_unchecked()});
     let rtc_io_a = make_static!(unsafe{ a_point.clone_unchecked()});

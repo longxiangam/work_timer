@@ -91,11 +91,11 @@ impl Page for  WeatherPage{
                     U8g2TextStyle::new(fonts::u8g2_font_wqy12_t_gb2312b, TwoBitColor::Black);
 
                 if let Some(battery) = BATTERY.lock().await.as_ref() {
-                    let mut battery_widget = BatteryWidget::new(4200, Point::new((display.size().width - 20) as i32, 2), Size::new(20, 10)
+                    let mut battery_widget = BatteryWidget::new(0, Point::new((display.size().width - 20) as i32, 2), Size::new(20, 10)
                                                             , TwoBitColor::Black, TwoBitColor::White);
 
                     battery_widget.set_current_value(battery.percent);
-                    /*battery_widget.draw(display);*/
+                    battery_widget.draw(display);
                 }
 
 

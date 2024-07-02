@@ -20,6 +20,7 @@ use embedded_layout::align::{Align, horizontal, vertical};
 use embedded_layout::layout::linear::LinearLayout;
 use embedded_layout::object_chain::Chain;
 use esp_println::println;
+use futures::FutureExt;
 use lcd_drivers::color::TwoBitColor;
 use u8g2_fonts::U8g2TextStyle;
 use u8g2_fonts::fonts;
@@ -31,7 +32,7 @@ use crate::event::EventType;
 use crate::pages::{ Page};
 use crate::pages::main_page::MainPage;
 use crate::request::{RequestClient, ResponseData};
-use crate::sound::{player_buzzer, stop_buzzer};
+use crate::sound::{player_buzzer, SoundType, stop_buzzer};
 use crate::wifi::use_wifi;
 use crate::worldtime::{CLOCK_SYNC_TIME_SECOND, get_clock};
 
@@ -49,7 +50,6 @@ pub struct TimerPage {
 impl TimerPage {
 
     fn increase(&mut self,speed:f32) {
-        self.finished = false;
         self.need_render = true;
         if !self.starting {
             if self.current_count < 3600 * 2 {
@@ -61,7 +61,7 @@ impl TimerPage {
     }
 
     fn decrease(&mut self,speed:f32) {
-        self.finished = false;
+        self.need_render = true;
         if !self.starting {
             if self.current_count > 0 {
                 self.current_count -=  speed as i32;
@@ -103,22 +103,28 @@ impl TimerPage {
             }
             if self.current_count == 0 {
                 self.finished = true;
-                player_buzzer().await;
+                println!("player");
+                player_buzzer(SoundType::Music(1)).await;
             }
         }
 
         self.need_render = true;
     }
 
-    fn back(&mut self){
+    async fn back(&mut self){
+        stop_buzzer().await;
         self.running = false;
     }
 
     async fn toggle_starting(&mut self){
-        if(self.finished) {
+
+        self.need_render = true;
+
+        if self.finished {
+            self.starting = false;
             self.finished = false;
-            self.need_render = true;
             stop_buzzer().await;
+            return;
         }
 
         if self.starting {
@@ -217,7 +223,7 @@ impl Page for TimerPage {
             println!("current_page:" );
             return Box::pin(async move {
                 let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr).unwrap();
-                mut_ref.back();
+                mut_ref.back().await;
 
                 println!("count_down_page:{}",mut_ref.current_count );
             });
@@ -275,7 +281,7 @@ impl Page for TimerPage {
                 break;
             }
 
-            if self.starting {
+            if self.starting && !self.finished {
                 if last_time == 0 {
                     last_time = Instant::now().as_secs();
                 }
@@ -283,6 +289,9 @@ impl Page for TimerPage {
                     last_time = Instant::now().as_secs();
                     self.step().await;
                 }
+            }
+            if self.finished {
+                self.need_render = true;
             }
 
             self.render().await;

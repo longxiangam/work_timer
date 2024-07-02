@@ -1,9 +1,11 @@
 //处理声音，不使用外部dac ,直接用 pwm 模拟播放提示音够用，
 
+use alloc::vec;
 use core::marker::PhantomData;
 use core::ops::DerefMut;
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
+use embassy_sync::signal::Signal;
 use embassy_time::Delay;
 use embedded_hal::delay::DelayNs;
 use embedded_hal::pwm::SetDutyCycle;
@@ -16,10 +18,12 @@ use hal::ledc::timer::{Timer, TimerIFace};
 use hal::peripheral::Peripheral;
 use hal::peripherals;
 use hal::prelude::{_esp_hal_ledc_channel_ChannelHW, _esp_hal_ledc_channel_ChannelIFace, _esp_hal_ledc_timer_TimerIFace, _fugit_RateExtU32};
+use heapless::Vec;
 use static_cell::{make_static, };
 use wavv::{Samples, Wave};
 
 const BYTES: &'static [u8] = include_bytes!("../files/sing8bit.wav");
+#[derive(Clone, Copy)]
 pub enum  SoundType{
     Warn(u32),
     Music(u32),
@@ -122,50 +126,137 @@ impl <GPIO> PwmPlayer<GPIO>
         *self.state.lock().await = PlayerState::Stop;
     }
 
+    //由gpt 生成的旋律
+    const TWO_TIGER: [(u32, u64); 34] = [
+        (262, 500), // C4, 500ms
+        (294, 500), // D4, 500ms
+        (330, 500), // E4, 500ms
+        (262, 1000), // C4, 1000ms
+        (0, 500),   // Pause, 500ms
+        (262, 500), // C4, 500ms
+        (294, 500), // D4, 500ms
+        (330, 500), // E4, 500ms
+        (262, 1000), // C4, 1000ms
+        (0, 500),   // Pause, 500ms
+        (330, 500), // E4, 500ms
+        (349, 500), // F4, 500ms
+        (392, 1000), // G4, 1000ms
+        (0, 500),   // Pause, 500ms
+        (330, 500), // E4, 500ms
+        (349, 500), // F4, 500ms
+        (392, 1000), // G4, 1000ms
+        (0, 500),   // Pause, 500ms
+        (392, 500), // G4, 500ms
+        (440, 500), // A4, 500ms
+        (392, 500), // G4, 500ms
+        (349, 500), // F4, 500ms
+        (330, 500), // E4, 500ms
+        (262, 1000), // C4, 1000ms
+        (0, 500),   // Pause, 500ms
+        (392, 500), // G4, 500ms
+        (440, 500), // A4, 500ms
+        (392, 500), // G4, 500ms
+        (349, 500), // F4, 500ms
+        (330, 500), // E4, 500ms
+        (262, 1000), // C4, 1000ms
+        (0, 500),   // Pause, 500ms
+        (294, 500), // D4, 500ms
+        (196, 1000), // G3, 1000ms
+    ];
+
+    const TWINKLE_TWINKLE: [(u32, u64); 47] = [
+        (261, 500), // C4, 500ms
+        (261, 500), // C4, 500ms
+        (392, 500), // G4, 500ms
+        (392, 500), // G4, 500ms
+        (440, 500), // A4, 500ms
+        (440, 500), // A4, 500ms
+        (392, 1000), // G4, 1000ms
+        (0, 100),   // Pause, 500ms
+        (349, 500), // F4, 500ms
+        (349, 500), // F4, 500ms
+        (330, 500), // E4, 500ms
+        (330, 500), // E4, 500ms
+        (294, 500), // D4, 500ms
+        (294, 500), // D4, 500ms
+        (261, 1000), // C4, 1000ms
+        (0, 100),   // Pause, 500ms
+        (392, 500), // G4, 500ms
+        (392, 500), // G4, 500ms
+        (349, 500), // F4, 500ms
+        (349, 500), // F4, 500ms
+        (330, 500), // E4, 500ms
+        (330, 500), // E4, 500ms
+        (294, 1000), // D4, 1000ms
+        (0, 100),   // Pause, 500ms
+        (392, 500), // G4, 500ms
+        (392, 500), // G4, 500ms
+        (349, 500), // F4, 500ms
+        (349, 500), // F4, 500ms
+        (330, 500), // E4, 500ms
+        (330, 500), // E4, 500ms
+        (294, 1000), // D4, 1000ms
+        (0, 100),   // Pause, 500ms
+        (261, 500), // C4, 500ms
+        (261, 500), // C4, 500ms
+        (392, 500), // G4, 500ms
+        (392, 500), // G4, 500ms
+        (440, 500), // A4, 500ms
+        (440, 500), // A4, 500ms
+        (392, 1000), // G4, 1000ms
+        (0, 100),   // Pause, 500ms
+        (349, 500), // F4, 500ms
+        (349, 500), // F4, 500ms
+        (330, 500), // E4, 500ms
+        (330, 500), // E4, 500ms
+        (294, 500), // D4, 500ms
+        (294, 500), // D4, 500ms
+        (261, 1000), // C4, 1000ms
+    ];
 
     //buzzer
     pub async fn player_buzzer(&mut self,sound_type: SoundType){
+        let mut melody:Vec<(u32,u64),100> = Vec::new();
+            match sound_type {
+            SoundType::Warn(_) => {}
+            SoundType::Music(n) => {
+                if n == 0 {
+                    melody = Vec::from_slice(&Self::TWO_TIGER).unwrap() ;
+                }
+                if n == 1 {
+                    melody = Vec::from_slice(&Self::TWINKLE_TWINKLE).unwrap();
+                }
+            }
+            SoundType::Tips(_) => {}
+        }
 
-
-        let melody = [
-            (262, 1), // C4
-            (294, 1), // D4
-            (330, 1), // E4
-            (262, 1), // C4
-            (262, 1), // C4
-            (294, 1), // D4
-            (330, 1), // E4
-            (262, 1), // C4
-            (330, 1), // E4
-            (349, 1), // F4
-            (392, 1), // G4
-            (330, 1), // E4
-            (349, 1), // F4
-            (392, 1), // G4
-        ];
         *self.state.lock().await = PlayerState::Playing;
 
-        let mut times = 30;
+        let mut times = 5;
 
          'out:loop {
 
             for (index,&(freq, duration)) in melody.iter().enumerate() {
                 let mut lstimer0: Timer<LowSpeed> =  self.ledc.get_timer::<LowSpeed>(timer::Number::Timer0);
                 let mut channel0 = self.ledc.get_channel(channel::Number::Channel0, unsafe{ self.sound_id.clone_unchecked()});
-                lstimer0.configure(timer::config::Config {
-                    duty: timer::config::Duty::Duty8Bit,
-                    clock_source: timer::LSClockSource::APBClk,
-                    frequency: freq*10.Hz(),
-                });
-                channel0
-                    .configure(channel::config::Config {
+                if freq == 0 {
+                    // 如果是停顿符，直接延时
+                    embassy_time::Timer::after_millis(duration).await;
+                } else {
+                    lstimer0.configure(timer::config::Config {
+                        duty: timer::config::Duty::Duty8Bit,
+                        clock_source: timer::LSClockSource::APBClk,
+                        frequency: freq * 10.Hz(),
+                    });
+                    channel0.configure(channel::config::Config {
                         timer: &lstimer0,
                         duty_pct: 10,
                         pin_config: channel::config::PinConfig::PushPull,
                     });
-                channel0.set_duty(20);
-                //Delay.delay_ms(duration * 5_00);
-                embassy_time::Timer::after_millis((duration * 5_00) as u64).await;
+                    channel0.set_duty(50);
+                    embassy_time::Timer::after_millis(duration).await;
+                    channel0.set_duty(0);
+                }
                 if *self.state.lock().await == PlayerState::Stop {
                     channel0.set_duty(0);
                     break 'out;
@@ -190,19 +281,28 @@ impl <GPIO> PwmPlayer<GPIO>
 
 
 
-pub async fn player_buzzer(){
-    unsafe {
-        if let Some(ref mut player) = PWM_PLAYER{
-            player.player_buzzer(SoundType::Warn(0)).await;
-        }
-    }
-
+pub async fn player_buzzer(sound_type: SoundType){
+    PLAYER_SIGN.signal(sound_type);
 }
 
 pub async fn stop_buzzer(){
     unsafe {
         if let Some(ref mut player) = PWM_PLAYER{
             player.stop().await;
+        }
+    }
+}
+
+static PLAYER_SIGN:Signal<CriticalSectionRawMutex,SoundType> = Signal::new();
+#[embassy_executor::task]
+pub async fn  buzzer_task(){
+    loop {
+        let sound_type = PLAYER_SIGN.wait().await;
+        PLAYER_SIGN.reset();
+        unsafe {
+            if let Some(ref mut player) = PWM_PLAYER{
+                player.player_buzzer(sound_type).await;
+            }
         }
     }
 }

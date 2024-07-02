@@ -81,7 +81,7 @@ use crate::battery::Battery;
 use crate::pages::{ Page};
 use crate::pages::init_page::InitPage;
 use crate::sleep::{add_rtcio, refresh_active_time, RTC_MANGE, to_sleep, WAKEUP_PINS};
-use crate::sound::{PWM_PLAYER, PwmPlayer, SoundType};
+use crate::sound::{buzzer_task, PWM_PLAYER, PwmPlayer, SoundType};
 use crate::storage::{enter_process, NvsStorage, read_flash, WIFI_INFO, WifiStorage, write_flash};
 use crate::weather::weather_worker;
 use crate::wifi::{connect_wifi, REINIT_WIFI_SIGNAL, start_wifi_ap, WIFI_MODEL, WifiModel};
@@ -172,6 +172,7 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
         PWM_PLAYER.replace(pwm_player);
     }
 
+    spawner.spawn(buzzer_task()).ok();
 
 
     let epd_sclk = io.pins.gpio6;

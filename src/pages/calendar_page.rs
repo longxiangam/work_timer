@@ -60,18 +60,18 @@ impl Page for CalendarPage {
                         let today = local.date();
                         let mut calendar = Calendar::new(Point::default(), Size::default(), year, month, today, TwoBitColor::Black, TwoBitColor::White);
                         calendar.position = Point::new(0,0);
-                        calendar.size = Size::new(display.size().width /2,display.size().height);
+                        calendar.size = Size::new(display.size().width ,display.size().height);
                         calendar.draw(display);
 
 
-                        let mut clock = ClockWidget::new(Point::default(), Size::default(), clock.local().await, TwoBitColor::Black, TwoBitColor::White);
+                  /*      let mut clock = ClockWidget::new(Point::default(), Size::default(), clock.local().await, TwoBitColor::Black, TwoBitColor::White);
                         let size = display.size() - Size::new(display.size().width / 2, 0);
                         let position = Point::new((display.size().width / 2 + 2)  as i32, 0);
 
                         let rect = Rectangle::new(position, size);
                         clock.center = rect.center();
                         clock.size = size;
-                        clock.draw(display);
+                        clock.draw(display);*/
 
                     }
                 }

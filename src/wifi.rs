@@ -152,7 +152,25 @@ pub async fn connect_wifi(spawner: &Spawner,
     spawner.spawn(connection_wifi(controller)).ok();
     spawner.spawn(net_task(stack)).ok();
     spawner.spawn(do_stop()).ok();
+    loop {
+        println!("Waiting is_link_up...");
+        if stack.is_link_up() {
+            break;
+        }
+        Timer::after(Duration::from_millis(1000)).await;
+    }
 
+    println!("Waiting to get IP address...");
+    loop {
+        if let Some(config) = stack.config_v4() {
+            println!("Got IP: {}", config.address);
+            unsafe {
+                IP_ADDRESS =  config.address.address().to_string().parse().unwrap();
+            }
+            break;
+        }
+        Timer::after(Duration::from_millis(500)).await;
+    }
     unsafe {
         STACK_MUT = Some(stack);
     }

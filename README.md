@@ -1,7 +1,7 @@
 # ESP32C3 + Embassy 练习项目
 
 这是一个练习项目，旨在研究如何在ESP32C3上使用Embassy进行开发。由于很难找到系统性的参考项目，大多数都是简单的main函数示例，因此只能自己实践一下。本项目的目标是实现一些实用功能，尽管功能比较杂，但都是我在考虑实际业务需求时需要的一些功能。由于时间有限，项目实现较为粗糙，但希望能对有类似需求的人有所参考。觉得有参考意义的人就看一看，本来也只是作为我自己的练习与记录，
-只是有几个朋友有兴趣看看，我才公开出来的，写的不好的地方可以指正一下，我也学习一下。
+
 
 项目功能如下：
 
@@ -67,3 +67,13 @@
 整个项目的设计和实现过程中仍然存在许多问题，需要进一步优化和改进。由于时间有限，只能粗略实现部分功能。希望这些内容对有相似需求的开发者有所帮助，如果有不妥之处，欢迎指正，一同学习进步。
 
 希望这个项目能为大家在使用ESP32C3和Embassy开发时提供一些参考和借鉴。
+
+​
+参考的项目：
+
+[claudiomattera/esp32c3-embassy: A Rust async firmware for ESP32-C3 for reading and displaying sensor values using Embassy (github.com)](https://github.com/claudiomattera/esp32c3-embassy)
+
+[vpikulik/sntpc_embassy: Example how to integrate sntpc crate with emabssy on rpi-pico w ([github.com](https://github.com/vpikulik/sntpc_embassy))](https://github.com/vpikulik/sntpc_embassy)
+
+
+​

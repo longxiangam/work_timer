@@ -14,6 +14,7 @@ use embedded_graphics::geometry::Dimensions;
 use embedded_graphics::prelude::{DrawTarget, Point, };
 
 use esp_println::println;
+use hal::macros::ram;
 use lcd_drivers::color::TwoBitColor;
 
 use crate::{ event};
@@ -30,13 +31,9 @@ use crate::pages::weather_page::WeatherPage;
 use crate::widgets::list_widget::ListWidget;
 
 static MAIN_PAGE:Mutex<CriticalSectionRawMutex,Option<MainPage> > = Mutex::new(None);
-pub static MAIN_PAGE_CHANNEL: Channel<CriticalSectionRawMutex,MainPageInfo, 64> = Channel::new();
 
-pub struct MainPageInfo{
-    pub count:i32
-}
-
-
+#[ram(rtc_fast)]
+pub static mut PAGE_INDEX:u32 = 2;
 
 ///每个page 包含状态与绘制与逻辑处理
 ///状态通过事件改变，并触发绘制
@@ -51,10 +48,14 @@ pub struct MainPage{
 impl MainPage {
 
     pub async fn init(spawner: Spawner){
+        let mut page_index = unsafe{ PAGE_INDEX };
+
         MAIN_PAGE.lock().await.replace(MainPage::new());
         spawner.spawn(increase()).ok();
         spawner.spawn(decrease()).ok();
         Self::bind_event(MAIN_PAGE.lock().await.as_mut().unwrap()).await;
+
+        MAIN_PAGE.lock().await.as_mut().unwrap().current_page = Some(page_index);
     }
 
     pub async fn get_mut() -> Option<&'static mut MainPage> {
@@ -95,7 +96,7 @@ impl Page for  MainPage{
         menus.push(MenuItem::new(String::<20>::from_str("天气").unwrap(), EWeatherPage));
         menus.push(MenuItem::new(String::<20>::from_str("日历").unwrap(), ECalendarPage));
         menus.push(MenuItem::new(String::<20>::from_str("游戏").unwrap(), EChip8Page));
-        menus.push(MenuItem::new(String::<20>::from_str("二维码").unwrap(), ESettingPage));
+        menus.push(MenuItem::new(String::<20>::from_str("设置").unwrap(), ESettingPage));
 
         Self{
             current_page:None,
@@ -152,6 +153,9 @@ impl Page for  MainPage{
             return Box::pin( async {
                 let mut_ref = Self::get_mut().await.unwrap();
                 mut_ref.current_page = Some( mut_ref.choose_index);
+                unsafe {
+                    PAGE_INDEX = mut_ref.choose_index;
+                }
                 println!("current_page:{}",Self::get_mut().await.unwrap().choose_index );
             });
         }).await;

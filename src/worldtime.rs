@@ -289,8 +289,8 @@ pub async fn ntp_worker() {
     unsafe {
         CLOCK.replace(clock);
     }
-    let mut init_page = InitPage::new();
-    init_page.append_log("开始同步时间").await;
+    //let mut init_page = InitPage::new();
+    //init_page.append_log("开始同步时间").await;
     Timer::after_secs(1).await;
     //rtc 是否保存了启动时间
     unsafe {
@@ -299,10 +299,11 @@ pub async fn ntp_worker() {
             let now =
                 OffsetDateTime::from_unix_timestamp(current_second as i64).unwrap();
             clock.set_time(now).await;
-            init_page.append_log(format!("时间：{}:{}:{}",clock.local().await.hour(),clock.local().await.minute(),clock.local().await.second()).as_str()).await;
+            //init_page.append_log(format!("时间：{}:{}:{}",clock.local().await.hour(),clock.local().await.minute(),clock.local().await.second()).as_str()).await;
             Timer::after_secs(5).await;
         }
     }
+    let mut err_times = 0;
     loop {
         let mut sleep_sec = 3600;
         let sync_time_second = unsafe{CLOCK_SYNC_TIME_SECOND};
@@ -312,12 +313,18 @@ pub async fn ntp_worker() {
             match use_wifi().await {
                 Ok(stack) => {
                     println!("NTP Request");
-                    init_page.append_log("NTP Request").await;
+                    //init_page.append_log("NTP Request").await;
                     match ntp_request(stack, get_clock().unwrap()).await {
                         Err(_) => {
                             finish_wifi().await;
                             println!("NTP error response");
-                            sleep_sec = 5;
+                            if(err_times > 10){
+                                err_times = 0;
+                                sleep_sec = 10;
+                            }else{
+                                sleep_sec = 1;
+                            }
+                            err_times +=1;
                         }
                         Ok(_) => {
                             finish_wifi().await;
@@ -325,14 +332,14 @@ pub async fn ntp_worker() {
                             unsafe {
                                 CLOCK_SYNC_TIME_SECOND =  get_clock().unwrap().now().await.unix_timestamp() as u64;
                             }
-
+                            err_times = 0;
                             sleep_sec = 3600;
                         },
                     }
                 }
                 Err(e) => {
                     println!("get stack err:{:?}", e);
-                    sleep_sec = 5;
+                    sleep_sec = 1;
                 }
             };
         }else{

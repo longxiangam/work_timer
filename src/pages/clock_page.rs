@@ -10,7 +10,8 @@ use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::Drawable;
 use embedded_graphics::geometry::Point;
 use embedded_graphics::mono_font::MonoTextStyleBuilder;
-use embedded_graphics::prelude::{Dimensions, Size};
+use embedded_graphics::prelude::{Dimensions, DrawTargetExt, OriginDimensions, Size};
+use embedded_graphics::primitives::Rectangle;
 use embedded_graphics::text::{Alignment, Baseline, Text, TextStyleBuilder};
 use esp_println::println;
 use lcd_drivers::color::TwoBitColor;
@@ -27,6 +28,7 @@ use crate::model::seniverse::{DailyResult, form_json};
 use crate::pages::{ Page};
 use crate::pages::main_page::MainPage;
 use crate::request::{RequestClient, ResponseData};
+use crate::widgets::clock_widget::ClockWidget;
 use crate::wifi::{finish_wifi, use_wifi};
 use crate::worldtime::{get_clock, sync_time_success};
 
@@ -115,8 +117,8 @@ impl ClockPage {
             D: DrawTarget<Color = TwoBitColor>,
     {
         let character_style = SevenSegmentStyleBuilder::new()
-            .digit_size(Size::new(30, 60))
-            .segment_width(5)
+            .digit_size(Size::new(13, 30))
+            .segment_width(3)
             .segment_color(TwoBitColor::Black)
             .build();
 
@@ -213,9 +215,28 @@ impl Page for ClockPage {
 
 
                                 let str = format_args!("{:02}:{:02}:{:02}",hour,minute,second).to_string();
-                                Self::draw_clock(display,str.as_str());
-                                let time = clock.get_date_str().await;
+
+                                let clipping_area = Rectangle::new(Point::default(),Size::new(display.size().width / 2,display.size().height) );
+                                let mut clipped_display = display.clipped(&clipping_area);
+                                Self::draw_clock(&mut clipped_display,str.as_str());
+
+                                let mut clock_widget = ClockWidget::new(Point::default(), Size::default(), clock.local().await, TwoBitColor::Black, TwoBitColor::White);
+                                let size = display.size() - Size::new(display.size().width / 2, 0);
+                                let position = Point::new((display.size().width / 2 + 2)  as i32, 0);
+
+                                let rect = Rectangle::new(position, size);
+                                clock_widget.center = rect.center();
+                                clock_widget.size = size;
+                                clock_widget.draw(display);
+
+                                //日期
+                                let mut time = clock.get_date_str().await;
+                                time.push_str(" ");
+                                time.push_str(clock.get_week_day().await.as_str());
                                 let _ = Text::new(time.as_str(), Point::new(0, 12), style.clone()).draw(display);
+
+
+
                             }
                         }else{
                             let _ = Text::new("同步时间...", Point::new(0,50), style.clone()).draw(display);

@@ -64,16 +64,12 @@ impl Page for CalendarPage {
                         calendar.draw(display);
 
 
-                  /*      let mut clock = ClockWidget::new(Point::default(), Size::default(), clock.local().await, TwoBitColor::Black, TwoBitColor::White);
-                        let size = display.size() - Size::new(display.size().width / 2, 0);
-                        let position = Point::new((display.size().width / 2 + 2)  as i32, 0);
-
-                        let rect = Rectangle::new(position, size);
-                        clock.center = rect.center();
-                        clock.size = size;
-                        clock.draw(display);*/
 
                     }
+                }else{
+                    let style =
+                        U8g2TextStyle::new(fonts::u8g2_font_wqy12_t_gb2312b, TwoBitColor::Black);
+                    let _ = Text::new("同步时间", Point::new(0,50), style.clone()).draw(display);
                 }
 
             }
@@ -93,7 +89,9 @@ impl Page for CalendarPage {
             self.need_render = true;
             self.render().await;
 
-            to_sleep(Duration::from_secs(0),Duration::from_secs(5)).await;
+            if sync_time_success() {
+                to_sleep(Duration::from_secs(3600), Duration::from_secs(10)).await;
+            }
             Timer::after(Duration::from_millis(50)).await;
         }
     }

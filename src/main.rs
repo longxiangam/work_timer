@@ -242,13 +242,6 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
     //连接wifi
     let mut need_ap = false;
     refresh_active_time().await;
-/*    //测试sleep
-    loop {
-
-        to_sleep(Duration::from_secs(0),Duration::from_secs(5)).await;
-
-        Timer::after(Duration::from_secs(1)).await;
-    }*/
 
 
 
@@ -280,11 +273,11 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
         }
 
     }else {
-        init_page.append_log("正在连接wifi").await;
+        //init_page.append_log("正在连接wifi").await;
         Timer::after_millis(10).await;
         WIFI_MODEL.lock().await.replace(WifiModel::STA);
 
-        init_page.append_log("已连接wifi").await;
+
         spawner.spawn(ntp_worker()).ok();
         spawner.spawn(weather_worker()).ok();
 
@@ -298,6 +291,7 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
                                  peripherals.WIFI,
                                  system.radio_clock_control,
                                  clocks).await;
+        //init_page.append_log("已连接wifi").await;
     }
 
 

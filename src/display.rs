@@ -8,7 +8,7 @@ use embedded_graphics::text::{Baseline, Text, TextStyleBuilder};
 use embedded_hal_bus::spi::ExclusiveDevice;
 
 use hal::dma::Channel0;
-use hal::gpio::{Gpio10,   Gpio2, Gpio3,    Output,  PushPull};
+use hal::gpio::{Gpio10, Gpio2, Gpio3, Input, Output};
 use hal::peripherals::SPI2;
 use hal::spi::master::dma::SpiDma;
 use lcd_drivers::prelude::Lcd2in7;
@@ -16,7 +16,7 @@ use lcd_drivers::prelude::WaveshareDisplay;
 use lcd_drivers::color::TwoBitColor;
 use lcd_drivers::uc1638::prelude::Display2in7;
 use embedded_graphics::{Drawable };
-
+use hal::spi::{FullDuplexMode, SpiMode};
 use lcd_drivers::graphics::TwoBitColorDisplay as _;
 
 pub struct RenderInfo{
@@ -26,10 +26,10 @@ pub struct RenderInfo{
 pub static mut DISPLAY:Option<Display2in7>  = None;
 pub static RENDER_CHANNEL: Channel<CriticalSectionRawMutex,RenderInfo, 64> = Channel::new();
 #[embassy_executor::task]
-pub async  fn render(mut spi:  SpiDma<'static,SPI2, Channel0, hal::spi::FullDuplexMode>,
-                           cs: Gpio2<Output<PushPull>>,
-                           rst: Gpio10<Output<PushPull>>,
-                           dc: Gpio3<Output<PushPull>>)
+pub async  fn render(mut spi:  SpiDma<'static, SPI2, Channel0, FullDuplexMode,Dual> ,
+                           cs:Output<'_,Gpio2> ,// Gpio2<Output<PushPull>>,
+                           rst:Output<'_,Gpio10>,
+                           dc: Output<'_,Gpio3>)
 {
 
     let mut spi_device = ExclusiveDevice::new(spi, cs, Delay);

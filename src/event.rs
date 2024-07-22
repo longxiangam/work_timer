@@ -12,7 +12,7 @@ use embedded_hal::digital::InputPin;
 use embedded_hal_async::digital::Wait;
 use esp_println::println;
 use futures::FutureExt;
-use hal::gpio::{Gpio11, Gpio5, Gpio8, Gpio9, Input, PullUp};
+use hal::gpio::{Gpio11, Gpio5, Gpio8, Gpio9, Input };
 use crate::ec11::RotateState;
 
 use crate::pages::Page;
@@ -117,8 +117,8 @@ pub async fn ec11_toggle_event(event_type: EventType,rotate_state:RotateState){
 }
 
 #[embassy_executor::task]
-pub async  fn run(mut key1:Gpio11<Input<PullUp>>,mut key2:Gpio8<Input<PullUp>>,
-                  mut key3:Gpio9<Input<PullUp>>){
+pub async  fn run(mut key1:Input<'_, Gpio11>,mut key2:Input<'_, Gpio8>,
+                  mut key3:Input<'_, Gpio9>){
     loop {
 
         let key1_edge = key1.wait_for_falling_edge();

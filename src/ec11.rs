@@ -6,8 +6,7 @@ use embassy_time::{Instant};
 
 use embedded_hal_async::digital::Wait;
 use esp_println::{ println};
-use hal::gpio::{Gpio0, Gpio1, Gpio13, Gpio5, Input, PullUp};
-use hal::prelude::_embedded_hal_digital_v2_InputPin;
+use hal::gpio::{Gpio0, Gpio1, Gpio13, Gpio5, Input };
 
 
 use crate::ec11::WheelDirection::{Back, Front, NoState};
@@ -83,7 +82,7 @@ const JUDGE_TIMES:u32 = 8;
 
 
 #[embassy_executor::task]
-pub async fn task(mut a_point :Gpio1<Input<PullUp>>,mut b_point :Gpio0<Input<PullUp>>,mut push_key:Gpio5<Input<PullUp>>){
+pub async fn task(mut a_point :Input<'_,Gpio1>,mut b_point :Input<'_,Gpio0>,mut push_key:Input<'_,Gpio5>){
     // 初始化编码器状态
 
     let mut begin_state = NoState;
@@ -100,10 +99,10 @@ pub async fn task(mut a_point :Gpio1<Input<PullUp>>,mut b_point :Gpio0<Input<Pul
                 let mut a_is_low_times = 0;
                 let mut b_is_low_times = 0;
                 for _i in 0..SAMPLE_TIMES {
-                    if a_point.is_low().unwrap() {
+                    if a_point.is_low() {
                         a_is_low_times += 1;
                     }
-                    if b_point.is_low().unwrap() {
+                    if b_point.is_low() {
                         b_is_low_times += 1;
                     }
                 }
@@ -162,7 +161,7 @@ pub async fn task(mut a_point :Gpio1<Input<PullUp>>,mut b_point :Gpio0<Input<Pul
 }
 
 
-fn detection(mut a_point :Gpio1<Input<PullUp>>, mut b_point :Gpio0<Input<PullUp>>) -> Option<WheelDirection> {
+fn detection(mut a_point :Input<Gpio1>, mut b_point :Input<Gpio0>) -> Option<WheelDirection> {
     // 检查状态变化，确定旋转方向
     /***
 AL a 低   AH  a 高   BL b 低  BH b 高
@@ -183,14 +182,14 @@ AL a 低   AH  a 高   BL b 低  BH b 高
      let mut current_a_state = a_point.is_low();
      let mut current_b_state = b_point.is_low();
      if current_a_state != last_a_state || current_b_state != last_b_state {
-         if last_a_state.unwrap() && last_b_state.unwrap() {
-             if current_a_state.unwrap() && !current_b_state.unwrap() {
+         if last_a_state && last_b_state {
+             if current_a_state && !current_b_state {
                  // 正转
                  num = num + 1;
                  println!("正转");
                  println!("num :{}", num);
                  return Some( WheelDirection::Front);
-             } else if !current_a_state.unwrap() && current_b_state.unwrap() {
+             } else if !current_a_state && current_b_state {
                  // 反转
                  num = num - 1;
                  println!("反转");

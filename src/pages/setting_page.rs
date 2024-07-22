@@ -1,14 +1,17 @@
 use alloc::{format, vec};
 use alloc::boxed::Box;
+use alloc::string::ToString;
 use eg_seven_segment::SevenSegmentStyleBuilder;
 use embassy_executor::Spawner;
 use embassy_net::Stack;
 use embassy_time::{Duration, Instant, Timer};
 use embedded_graphics::Drawable;
-use embedded_graphics::geometry::{Dimensions, Point, Size};
-use embedded_graphics::prelude::{DrawTarget, Primitive};
+use embedded_graphics::geometry::{Dimensions, OriginDimensions, Point, Size};
+use embedded_graphics::prelude::{DrawTarget, DrawTargetExt, Primitive};
 use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle};
 use embedded_graphics::text::{Alignment, Baseline, Text, TextStyleBuilder};
+use embedded_text::style::{HeightMode, TextBoxStyleBuilder};
+use embedded_text::TextBox;
 use esp_println::{print, println};
 use esp_wifi::wifi::{WifiDevice, WifiStaDevice};
 use hal::reset::software_reset;
@@ -18,11 +21,14 @@ use qrcodegen_no_heap::Mask;
 use qrcodegen_no_heap::QrCode;
 use qrcodegen_no_heap::QrCodeEcc;
 use qrcodegen_no_heap::Version;
+use u8g2_fonts::{FontRenderer, U8g2TextStyle};
+use u8g2_fonts::fonts;
+
 use crate::display::{display_mut, RENDER_CHANNEL, RenderInfo};
 use crate::event;
 use crate::event::EventType;
 use crate::pages::Page;
-use crate::storage::{NvsStorage, WIFI_INFO};
+use crate::storage::{init_storage_area, NvsStorage, WIFI_INFO};
 use crate::weather::get_weather;
 use crate::widgets::qrcode_widget::QrcodeWidget;
 use crate::wifi::{finish_wifi, IP_ADDRESS,  use_wifi,  WIFI_MODEL, WifiNetError};
@@ -59,12 +65,36 @@ impl Page for SettingPage {
                 let mut url:String<50> = String::new();
                 url.push_str("http://");
                 url.push_str(ip);
-                url.push_str(":8080/config");
+                url.push_str(":80/config");
 
                 let qrcode_widget = QrcodeWidget::new(&url,Point::new(0,0)
                                                       , Size::new(display.bounding_box().size.height,display.bounding_box().size.height)
                                                       , TwoBitColor::Black, TwoBitColor::White);
                 qrcode_widget.draw(display);
+
+                let style =
+                    U8g2TextStyle::new(fonts::u8g2_font_wqy12_t_gb2312b, TwoBitColor::Black);
+                let _ = Text::new("长按旋钮5秒重置设备", Point::new(display.bounding_box().size.height as i32, 20), style.clone())
+                    .draw(display);
+
+                let clipping_area = Rectangle::new(Point::new(display.bounding_box().size.height as i32, 40)
+                                               , Size::new(display.bounding_box().size.width - display.bounding_box().size.height,60));
+                let mut clipped_display = display.clipped(&clipping_area);
+
+                TextBox::new(
+                    format!("地址：{}",url).as_str(),
+                    clipping_area,
+                    style.clone(),
+                )
+                    .draw(&mut clipped_display);
+
+
+                if self.long_start_time > 0 {
+                    let secs =Instant::now().as_secs() - self.long_start_time;
+                    let _ = Text::new( format!("已长按：{} 秒",secs).as_str(), Point::new(display.bounding_box().size.height as i32, 80), style.clone())
+                        .draw(display);
+                }
+
 
                 RENDER_CHANNEL.send(RenderInfo { time: 0 }).await;
             }
@@ -99,31 +129,33 @@ impl Page for SettingPage {
                 mut_ref.running = false;
             });
         }).await;
-/*
 
-        event::on_target(EventType::KeyLongStart(5),Self::mut_to_ptr(self),  move |ptr,info|  {
+
+        event::on_target(EventType::KeyLongStart(5),Self::mut_to_ptr(self),  move |info|  {
             return Box::pin(async move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr.clone()).unwrap();
                 mut_ref.long_start_time = Instant::now().as_secs();
             });
         }).await;
 
-        event::on_target(EventType::KeyLongIng(5),Self::mut_to_ptr(self),  move |ptr,info|  {
+        event::on_target(EventType::KeyLongIng(5),Self::mut_to_ptr(self),  move |info|  {
             return Box::pin(async move {
-                let mut_ref:&mut Self =  Self::mut_by_ptr(ptr.clone()).unwrap();
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr.clone()).unwrap();
                 if(mut_ref.long_start_time == 0){
                     mut_ref.long_start_time = Instant::now().as_secs();
                 }
                 if(Instant::now().as_secs() - mut_ref.long_start_time  > 5){
-                    if let Some(wifi_info) = WIFI_INFO.lock().await.as_mut() {
-                        println!("wifi_info:{:?}", wifi_info);
-                        wifi_info.wifi_finish = false;
-                        wifi_info.write();
-                        software_reset();
-                    }
+                    init_storage_area();
+                    software_reset();
                 }
             });
-        }).await;*/
+        }).await;
+        event::on_target(EventType::KeyLongEnd(5),Self::mut_to_ptr(self),  move |info|  {
+            return Box::pin(async move {
+                let mut_ref:&mut Self =  Self::mut_by_ptr(info.ptr.clone()).unwrap();
+                mut_ref.long_start_time = 0;
+            });
+        }).await;
 
 
     }

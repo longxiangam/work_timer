@@ -18,11 +18,11 @@ use esp_storage::FlashStorageError;
 use esp_wifi::{EspWifiInitFor, initialize};
 use esp_wifi::wifi::{AccessPointConfiguration, AuthMethod, ClientConfiguration, Configuration, WifiApDevice, WifiController, WifiDevice, WifiEvent, WifiStaDevice, WifiState};
 use esp_wifi::wifi::ipv4::{ RouterConfiguration, SocketAddrV4};
-use hal::{embassy, Rng};
 use hal::clock::Clocks;
-use hal::peripherals::{SYSTIMER, WIFI};
+use hal::peripherals::{RADIO_CLK, SYSTIMER, WIFI};
 use hal::reset::software_reset;
-use hal::system::RadioClockControl;
+use hal::rng::Rng;
+use hal::system::SystemClockControl;
 use heapless::{String, Vec};
 use httparse::Header;
 use static_cell::{make_static, StaticCell};
@@ -51,8 +51,8 @@ pub enum WifiNetError {
 
 
 
-const SSID: &str = env!("SSID");
-const PASSWORD: &str = env!("PASSWORD");
+/*const SSID: &str = env!("SSID");
+const PASSWORD: &str = env!("PASSWORD");*/
 
 const HOW_LONG_SECS_CLOSE:u64 = 30;//20秒未使用wifi 断开
 
@@ -71,18 +71,18 @@ pub async fn connect_wifi(spawner: &Spawner,
                           systimer: SYSTIMER,
                           rng: Rng,
                           wifi: WIFI,
-                          radio_clock_control: RadioClockControl,
+                          radio_clk: RADIO_CLK,
                           clocks: &Clocks<'_> )
     -> Result<&'static Stack<WifiDevice<'static, WifiStaDevice>>, WifiNetError> {
     REINIT_WIFI_SIGNAL.wait().await;
     HAL_RNG.lock().await.replace(rng);
 
-    let timer = hal::systimer::SystemTimer::new(systimer).alarm0;
+    let timer = hal::timer::systimer::SystemTimer::new(systimer).alarm0;
     let init = initialize(
         EspWifiInitFor::Wifi,
         timer,
         rng,
-        radio_clock_control,
+        radio_clk,
         &clocks,
     )
         .unwrap();
@@ -221,16 +221,23 @@ async fn connection_wifi(mut controller: WifiController<'static>) {
             _ => { WIFI_STATE.lock().await.replace(WifiNetState::WifiDisconnected);}
         }
         if !matches!(controller.is_started(), Ok(true)) {
-            let client_config = Configuration::Client(ClientConfiguration {
-                ssid: SSID.try_into().unwrap(),
-                password: PASSWORD.try_into().unwrap(),
-                auth_method: AuthMethod::None,
-                ..Default::default()
-            });
-            controller.set_configuration(&client_config).unwrap();
-            println!("Starting wifi");
-            controller.start().await.unwrap();
-            println!("Wifi started!");
+            loop {
+                if let Some(ref wifi_info) = *WIFI_INFO.lock().await {
+                    let client_config = Configuration::Client(ClientConfiguration {
+                        ssid:wifi_info.wifi_ssid.clone(), //SSID.try_into().unwrap(),
+                        password:wifi_info.wifi_password.clone(), //PASSWORD.try_into().unwrap(),
+                        auth_method: AuthMethod::None,
+                        ..Default::default()
+                    });
+                    controller.set_configuration(&client_config).unwrap();
+                    println!("Starting wifi");
+                    controller.start().await.unwrap();
+                    println!("Wifi started!");
+                    break;
+                } else {
+                    Timer::after(Duration::from_millis(50)).await;
+                }
+            }
         }
         println!("About to connect...");
 
@@ -354,18 +361,18 @@ pub async fn start_wifi_ap(spawner: &Spawner,
                            systimer: SYSTIMER,
                            rng: Rng,
                            wifi: WIFI,
-                           radio_clock_control: RadioClockControl,
+                           radio_clk: RADIO_CLK,
                            clocks: &Clocks<'_> )
                            -> Result<&'static Stack<WifiDevice<'static, WifiApDevice>>, WifiNetError> {
 
     HAL_RNG.lock().await.replace(rng);
 
-    let timer = hal::systimer::SystemTimer::new(systimer).alarm0;
+    let timer = hal::timer::systimer::SystemTimer::new(systimer).alarm0;
     let init = initialize(
         EspWifiInitFor::Wifi,
         timer,
         rng,
-        radio_clock_control,
+        radio_clk,
         &clocks,
     )
         .unwrap();
@@ -383,13 +390,14 @@ pub async fn start_wifi_ap(spawner: &Spawner,
             Stack::new(
                 wifi_ap_interface,
                 ap_config,
-                make_static!( StackResources::<3>::new()),
+                make_static!( StackResources::<4>::new()),
                 seed
             )
         );
 
     spawner.spawn(ap_task(&ap_stack)).ok();
     spawner.spawn(dhcp_service()).ok();
+    spawner.spawn(dns_service()).ok();
     spawner.spawn(connection_wifi_ap(controller)).ok();
 
 
@@ -437,6 +445,7 @@ async fn connection_wifi_ap(mut controller: WifiController<'static>) {
         if !matches!(controller.is_started(), Ok(true)) {
             let client_config = Configuration::AccessPoint(AccessPointConfiguration {
                 ssid: "esp-wifi".try_into().unwrap(),
+                password:String::from_str("123456789").unwrap(),
                 ..Default::default()
             });
             controller.set_configuration(&client_config).unwrap();
@@ -453,12 +462,6 @@ async fn dhcp_service(){
     const TX_BUFFER_SIZE: usize = 512; // 发送缓冲区大小
     const PACKET_META_SIZE: usize = 10; // 元数据大小
 
-
-    let mut ip_pool:heapless::Vec<Ipv4Addr,10> = heapless::Vec::new();
-    ip_pool.push( Ipv4Addr::new(192, 168, 2, 2));
-    ip_pool.push( Ipv4Addr::new(192, 168, 2, 3));
-    ip_pool.push( Ipv4Addr::new(192, 168, 2, 4));
-    ip_pool.push( Ipv4Addr::new(192, 168, 2, 5));
 
     loop {
 
@@ -596,4 +599,84 @@ async fn send_dhcp_ack(udp_socket: & UdpSocket<'_>, src_addr: IpEndpoint, receiv
 
     let broadcast = ( Ipv4Address::BROADCAST,68);
     udp_socket.send_to(&offer_message, broadcast).await;
+}
+
+//dns劫持服务
+#[embassy_executor::task]
+async fn dns_service(){
+    const RX_BUFFER_SIZE: usize = 512; // 接收缓冲区大小
+    const TX_BUFFER_SIZE: usize = 512; // 发送缓冲区大小
+    const PACKET_META_SIZE: usize = 10; // 元数据大小
+
+
+    const LOCAL_IP:Ipv4Addr =  Ipv4Addr::new(192, 168, 2, 1);
+
+    'main_loop: loop {
+
+        unsafe {
+            if let Some(ap_stack) = AP_STACK_MUT {
+                loop {
+                    if ap_stack.is_link_up() {
+                        break;
+                    }
+                    Timer::after(Duration::from_millis(500)).await;
+                }
+
+                let mut rx_meta = [embassy_net::udp::PacketMetadata::EMPTY; PACKET_META_SIZE];
+                let mut rx_buffer = [0u8; RX_BUFFER_SIZE];
+                let mut tx_meta = [embassy_net::udp::PacketMetadata::EMPTY; PACKET_META_SIZE];
+                let mut tx_buffer = [0u8; TX_BUFFER_SIZE];
+                let mut udp_socket = UdpSocket::new(ap_stack, &mut rx_meta, &mut rx_buffer, &mut tx_meta, &mut tx_buffer);
+                udp_socket.bind(53);
+
+                // 无限循环处理消息
+                loop {
+                    let mut buf = [0u8; 512];
+                    println!("Dns等待请求") ;
+                    match udp_socket.recv_from(&mut buf).await {
+                        Ok((n, src)) => {
+                            println!("Dns Received {} bytes from {}", n, src);
+                            println!("Dns Received:{:?} ", buf );
+
+                            let response = create_dns_response(LOCAL_IP,&buf[..n]);
+                            udp_socket.send_to(&response, src).await.expect("发送数据失败");
+                            //break 'main_loop;
+
+                        }
+                        Err(e) => {
+                            println!("Failed to receive UDP packet: {:?}", e);
+                        }
+                    }
+
+
+                    Timer::after(Duration::from_millis(50)).await
+                }
+            }
+        }
+
+        Timer::after(Duration::from_millis(500)).await
+    }
+}
+
+fn create_dns_response(ip:Ipv4Addr, request: &[u8]) -> Vec<u8, 512> {
+    let mut response = Vec::new();
+
+    // 构建简单的 DNS 响应，将所有请求重定向到 ESP32 的 IP 地址
+    // 假设 DNS 请求符合规范并且无错误处理
+
+    response.extend_from_slice(&request[0..2]).unwrap(); // 复制 ID
+    response.extend_from_slice(&[0x81, 0x80]).unwrap(); // 标志：响应，无错误
+    response.extend_from_slice(&request[4..6]).unwrap(); // 问题数
+    response.extend_from_slice(&[0x00, 0x01]).unwrap(); // 答案数：1
+    response.extend_from_slice(&[0x00, 0x00]).unwrap(); // 权威答案数：0
+    response.extend_from_slice(&[0x00, 0x00]).unwrap(); // 附加记录数：0
+    response.extend_from_slice(&request[12..]).unwrap(); // 复制查询部分
+    response.extend_from_slice(&[0xc0, 0x0c]).unwrap(); // 指针到查询部分
+    response.extend_from_slice(&[0x00, 0x01]).unwrap(); // 类型：A
+    response.extend_from_slice(&[0x00, 0x01]).unwrap(); // 类别：IN
+    response.extend_from_slice(&[0x00, 0x00, 0x00, 0x3c]).unwrap(); // TTL：60秒
+    response.extend_from_slice(&[0x00, 0x04]).unwrap(); // 数据长度：4字节
+    response.extend_from_slice(&ip.octets()).unwrap(); // IP 地址
+
+    response
 }

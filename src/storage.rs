@@ -80,7 +80,7 @@ const WIFI_STORAGE_OFFSET:usize =  VERSION_STORAGE_OFFSET+ size_of::<VersionStor
 #[derive(Debug,Default)]
 pub struct WifiStorage{
     pub wifi_ssid:heapless::String<32>,
-    pub wifi_password:heapless::String<32>,
+    pub wifi_password:heapless::String<64>,
     pub wifi_finish:bool
 }
 
@@ -107,6 +107,7 @@ impl_storage!(OtherStorage, OTHER_STORAGE_OFFSET);
 
 
 pub static WIFI_INFO:Mutex<CriticalSectionRawMutex,Option<WifiStorage>>  =  Mutex::new(None);
+pub static WEATHER_API:Mutex<CriticalSectionRawMutex,Option<WeatherStorage>>  =  Mutex::new(None);
 
 pub async fn enter_process(){
     let version_storage = VersionStorage::read();

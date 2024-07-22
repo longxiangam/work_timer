@@ -27,7 +27,7 @@ use crate::pages::Page;
 use crate::request::RequestClient;
 use crate::weather::{get_weather, WEATHER_SYNC_SUCCESS};
 use crate::widgets::battery_widget::BatteryWidget;
-use crate::wifi::{finish_wifi, use_wifi};
+use crate::wifi::{finish_wifi, use_wifi, WIFI_STATE};
 use crate::worldtime::{get_clock, sync_time_success};
 
 
@@ -98,6 +98,13 @@ impl Page for  WeatherPage{
                     battery_widget.draw(display);
                 }
 
+                let mut wifi_finish = false;
+                if let Some(crate::wifi::WifiNetState::WifiConnecting) = *WIFI_STATE.lock().await {
+                    let _ = Text::new("正在连接网络...", Point::new(0,20), style.clone())
+                        .draw(display);
+                }else{
+                    wifi_finish = true;
+                }
 
                 if *WEATHER_SYNC_SUCCESS.lock().await {
                     if let Some(weather) = get_weather() {
@@ -115,12 +122,11 @@ impl Page for  WeatherPage{
                             }
 
                         }
-                        else{
-                            let _ = Text::new("同步天气...", Point::new(0,50), style.clone())
-                                .draw(display);
-                        }
                     }
 
+                }else if(wifi_finish){
+                    let _ = Text::new("正在同步天气...", Point::new(0,40), style.clone())
+                        .draw(display);
                 }
                 if sync_time_success() {
                     if let Some(clock) = get_clock() {
@@ -162,8 +168,9 @@ impl Page for  WeatherPage{
                         );
 
                     }
-                }else{
-                    Self::draw_clock(display,"同步时间...");
+                }else if(wifi_finish){
+                    let _ = Text::new("正在同步时间...", Point::new(0, 60), style.clone())
+                        .draw(display);
                 }
                 RENDER_CHANNEL.send(RenderInfo { time: 0 }).await;
 

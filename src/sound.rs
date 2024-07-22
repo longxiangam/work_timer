@@ -11,12 +11,13 @@ use embedded_hal::delay::DelayNs;
 use embedded_hal::pwm::SetDutyCycle;
 use esp_println::println;
 use hal::clock::Clocks;
-use hal::gpio::{Gpio12, GpioPin, Output, PushPull};
+use hal::gpio::{Gpio12, GpioPin, Output };
 use hal::ledc::channel::Channel;
-use hal::ledc::{channel, LEDC, LowSpeed, LSGlobalClkSource, timer};
+use hal::ledc::{channel, Ledc, LowSpeed, LSGlobalClkSource, timer};
 use hal::ledc::timer::{Timer, TimerIFace};
 use hal::peripheral::Peripheral;
 use hal::peripherals;
+use hal::peripherals::LEDC;
 use hal::prelude::{_esp_hal_ledc_channel_ChannelHW, _esp_hal_ledc_channel_ChannelIFace, _esp_hal_ledc_timer_TimerIFace, _fugit_RateExtU32};
 use heapless::Vec;
 use static_cell::{make_static, };
@@ -37,11 +38,11 @@ enum PlayerState{
 }
 
 
-pub static mut PWM_PLAYER:Option<PwmPlayer<GpioPin<Output<PushPull>,13>>> = None;
+pub static mut PWM_PLAYER:Option<PwmPlayer<Output<GpioPin<13>>>> = None;
 
 pub struct PwmPlayer<GPIO: hal::gpio::OutputPin>{
    /* timer: &'static   dyn TimerIFace<LowSpeed>,*/
-    ledc:&'static mut LEDC<'static>,
+    ledc:&'static mut LEDC,
     //pwm_channel:Channel<'a,LowSpeed,GPIO>,
     sound_id:GPIO,
     volume:usize,//0-200， 100 是原生
@@ -55,7 +56,7 @@ impl <GPIO> PwmPlayer<GPIO>
     pub fn init(ledc: peripherals::LEDC, clocks: &'static Clocks<'static>, sound_io:GPIO) -> PwmPlayer<GPIO>
         where <GPIO as Peripheral>::P: hal::gpio::OutputPin
     {
-        let ledc:&mut LEDC<'static>  = make_static!(LEDC::new(ledc, clocks));
+        let ledc:&mut Ledc<'static>  = make_static!(Ledc::new(ledc, clocks));
 
         ledc.set_global_slow_clock(LSGlobalClkSource::APBClk);
 
@@ -80,6 +81,7 @@ impl <GPIO> PwmPlayer<GPIO>
                 frequency: 200u32.kHz(),
             })
             .unwrap();
+
 
          let mut channel0 = self.ledc.get_channel(channel::Number::Channel0, unsafe{ self.sound_id.clone_unchecked()});
          channel0

@@ -6,6 +6,7 @@
 #![allow(unused)]
 #![allow(async_fn_in_trait)]
 #![feature(generic_const_exprs)]
+#![feature(impl_trait_in_assoc_type)]
 
 extern crate alloc;
 pub mod display;
@@ -48,31 +49,32 @@ use esp_println::{print, println};
 use esp_wifi::wifi::{WifiController, WifiDevice, WifiEvent, WifiStaDevice, WifiState};
 use esp_wifi::{initialize, EspWifiInitFor};
 use hal::clock::{Clock, ClockControl, Clocks};
-use hal::{Cpu, Rng, Rtc};
-use hal::{embassy, peripherals::Peripherals, prelude::*, timer::TimerGroup,dma_descriptors,
-          spi::{ master::{prelude::*, Spi}, SpiMode,  }, dma::Dma,gpio::IO};
-use hal::adc::{AdcConfig, Attenuation,ADC};
-
+use hal::{Cpu, rng::Rng};
+use hal::{ peripherals::Peripherals, prelude::*, dma_descriptors,
+          spi::{ master::{prelude::*, Spi}, SpiMode,  }, dma::*};
+use hal::analog::adc::{Adc, AdcConfig, Attenuation};
 use hal::peripherals::{ADC1, LPWR, SPI2, WIFI};
 use static_cell::{make_static, StaticCell};
 use hal::dma::{DmaDescriptor, DmaPriority};
 use hal::dma::Channel0;
 
 
-use hal::gpio::{Gpio11, Gpio12, Gpio13, Gpio18, Gpio19, Gpio4, Gpio5, Gpio8, Gpio9, Input, NO_PIN, OpenDrain, Output, PullUp, RTCPinWithResistors};
-use hal::ledc::{channel, LEDC, LowSpeed, LSGlobalClkSource, timer};
+use hal::gpio::{Gpio11, Gpio12, Gpio13, Gpio18, Gpio19, Gpio4, Gpio5, Gpio8, Gpio9, Input, NO_PIN, OutputOpenDrain, Output, Io, Level, Pull, Analog};
+use hal::ledc::{channel,  LowSpeed, LSGlobalClkSource, timer};
 use hal::ledc::timer::config::Duty::Duty8Bit;
 use hal::peripheral::Peripheral;
 use hal::reset::software_reset;
 use hal::riscv::_export::critical_section::Mutex;
 use hal::riscv::_export::critical_section;
-use hal::rtc_cntl::{get_reset_reason, get_wakeup_cause, SocResetReason};
+use hal::rtc_cntl::{get_reset_reason, get_wakeup_cause, Rtc, SocResetReason};
 use hal::rtc_cntl::sleep::{RtcioWakeupSource, TimerWakeupSource, WakeupLevel};
 
 use hal::spi::FullDuplexMode;
 use hal::spi::master::dma::SpiDma;
 use hal::system::Peripheral::Ledc;
-use hal::system::RadioClockControl;
+use hal::system::SystemControl;
+use hal::timer::OneShotTimer;
+use hal::timer::timg::TimerGroup;
 use heapless::String;
 use lcd_drivers::color::TwoBitColor;
 use log::info;
@@ -110,13 +112,12 @@ async fn main(spawner: Spawner) {
     }*/
 }
 
-async fn test_main(spawner: &Spawner)->Result<(),Error>{
+/*async fn test_main(spawner: &Spawner)->Result<(),Error>{
     let peripherals = Peripherals::take();
-
-    let system = peripherals.SYSTEM.split();
+    let system = SystemControl::new(peripherals.SYSTEM);
     let clocks  = &*make_static!( ClockControl::max(system.clock_control).freeze());
 
-    let mut rtc = Rtc::new(peripherals.LPWR);
+    let mut rtc = Rtc::new(peripherals.LPWR,None);
     RTC_MANGE.lock().await.replace(rtc);
     unsafe {
         CLOCKS_REF.replace(clocks);
@@ -126,23 +127,30 @@ async fn test_main(spawner: &Spawner)->Result<(),Error>{
     let wake_reason = get_wakeup_cause();
     println!("wake reason: {:?}", wake_reason);
 
+    let timg0 = TimerGroup::new(peripherals.TIMG0, &clocks, None);
+    let timers:&mut [OneShotTimer<ErasedTimer>; 1] =  make_static!([OneShotTimer::new(timg0.timer0.into())]);
+    let timers = mk_static!(
+        [OneShotTimer<ErasedTimer>; 1],
+        [OneShotTimer::new(timg0.timer0.into())]
+    );
+    esp_hal_embassy::init(&clocks, timers);
     let timer_group0 = TimerGroup::new(peripherals.TIMG0, &clocks);
     embassy::init(&clocks, timer_group0);
     loop {
         println!("enter test");
         Timer::after_secs(1);
     }
-}
+}*/
 
 
 async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
 
     let peripherals = Peripherals::take();
 
-    let system = peripherals.SYSTEM.split();
-    let clocks  = &*make_static!( ClockControl::max(system.clock_control).freeze());
+    let mut system = SystemControl::new(peripherals.SYSTEM);
+    let clocks  = &*make_static!( ClockControl::max(system.clock_control.clone_unchecked()).freeze());
 
-    let mut rtc = Rtc::new(peripherals.LPWR);
+    let mut rtc = Rtc::new(peripherals.LPWR,None);
     RTC_MANGE.lock().await.replace(rtc);
     unsafe {
         CLOCKS_REF.replace(clocks);
@@ -152,9 +160,8 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
     let wake_reason = get_wakeup_cause();
     println!("wake reason: {:?}", wake_reason);
 
-    let timer_group0 = TimerGroup::new(peripherals.TIMG0, &clocks);
-    embassy::init(&clocks, timer_group0);
-
+    let timg0 = TimerGroup::new_async(peripherals.TIMG0, &clocks);
+    esp_hal_embassy::init(&clocks, timg0);
 /*    //测试软件重启位
     unsafe {
         peripherals.LPWR.options0().modify(|_, w| w.sw_sys_rst().set_bit());
@@ -163,8 +170,8 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
     println!("do main");
     enter_process().await;
     //spi
-    let io = IO::new(peripherals.GPIO, peripherals.IO_MUX);
-    let mut buzzer = io.pins.gpio13.into_push_pull_output();
+    let mut io = Io::new(peripherals.GPIO, peripherals.IO_MUX);
+    let mut buzzer =Output::new(io.pins.gpio13,Level::High);
     buzzer.set_low();
 
     let mut pwm_player =  PwmPlayer::init(peripherals.LEDC, &clocks, buzzer);
@@ -177,9 +184,9 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
 
     let epd_sclk = io.pins.gpio6;
     let epd_mosi = io.pins.gpio7;
-    let epd_cs = io.pins.gpio2.into_push_pull_output();
-    let epd_rst = io.pins.gpio10.into_push_pull_output();
-    let epd_dc = io.pins.gpio3.into_push_pull_output();
+    let epd_cs = io.pins.gpio2;
+    let epd_rst = io.pins.gpio10;
+    let epd_dc = io.pins.gpio3;
 
     let dma = Dma::new(peripherals.DMA);
     let dma_channel = dma.channel0;
@@ -195,7 +202,8 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
         .with_mosi(epd_mosi);
 
 
-    let spi_dma: SpiDma<'_, SPI2, Channel0, FullDuplexMode> = spi_bus.with_dma(
+    //: SpiDma<'_, SPI2, Channel0, FullDuplexMode,SpiMode>
+    let spi_dma = spi_bus.with_dma(
         dma_channel.configure(false, descriptors, rx_descriptors, DmaPriority::Priority0),
     );
 
@@ -204,19 +212,19 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
     let mut init_page = InitPage::new();
 
 
-    let mut a_point = io.pins.gpio1.into_pull_up_input();
-    let mut b_point = io.pins.gpio0.into_pull_up_input();
+    let mut a_point = Input::new(unsafe{io.pins.gpio1.clone_unchecked()},Pull::Up);
+    let mut b_point = Input::new(unsafe{io.pins.gpio0.clone_unchecked()},Pull::Up);
 
-    let mut key1 = io.pins.gpio11.into_pull_up_input();
-    let key2 = io.pins.gpio8.into_pull_up_input();
-    let key3 = io.pins.gpio9.into_pull_up_input();
-    let mut key_ec11 = io.pins.gpio5.into_pull_up_input();
-    let mut bat_adc = io.pins.gpio4.into_analog();
+    let mut key1 = Input::new( io.pins.gpio11,Pull::Up);
+    let key2 = Input::new( io.pins.gpio8,Pull::Up);
+    let key3 = Input::new( io.pins.gpio9,Pull::Up);
+    let mut key_ec11 = Input::new(unsafe{ io.pins.gpio5.clone_unchecked()},Pull::Up);
+    let mut bat_adc = io.pins.gpio4;
 
 
-    let rtc_io_2 = make_static!(unsafe{ key_ec11.clone_unchecked()});
-    let rtc_io_a = make_static!(unsafe{ a_point.clone_unchecked()});
-    let rtc_io_b = make_static!(unsafe{ b_point.clone_unchecked()});
+    let rtc_io_2 = make_static!( io.pins.gpio5);
+    let rtc_io_a = make_static!( io.pins.gpio1);
+    let rtc_io_b = make_static!( io.pins.gpio0);
 
     add_rtcio( rtc_io_2,  WakeupLevel::Low).await;
     add_rtcio( rtc_io_a,  WakeupLevel::Low).await;
@@ -234,7 +242,7 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
     let mut adc1_config = AdcConfig::new();
     let mut adc1_pin =
         adc1_config.enable_pin_with_cal::<_, AdcCal>(bat_adc, Attenuation::Attenuation11dB);
-    let adc1 = ADC::new(peripherals.ADC1, adc1_config);
+    let adc1 = Adc::new(peripherals.ADC1, adc1_config);
     let battery = Battery::new(adc1);
     battery::BATTERY.lock().await.replace(battery);
     battery::ADC_PIN.lock().await.replace(adc1_pin);
@@ -262,7 +270,7 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
                                  peripherals.SYSTIMER,
                                  Rng::new(peripherals.RNG),
                                  peripherals.WIFI,
-                                 system.radio_clock_control,
+                                 unsafe {system.clock_control.clone_unchecked()},
                                  clocks).await;
 
         loop {
@@ -289,7 +297,7 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error>{
                                  peripherals.SYSTIMER,
                                  Rng::new(peripherals.RNG),
                                  peripherals.WIFI,
-                                 system.radio_clock_control,
+                                 peripherals.RADIO_CLK,
                                  clocks).await;
         //init_page.append_log("已连接wifi").await;
     }
@@ -318,10 +326,10 @@ fn alloc(){
 }
 
 
-pub fn enter_deep(rtc_cntl: LPWR, mut delay: hal::Delay, interval: core::time::Duration) -> ! {
+pub fn enter_deep(rtc_cntl: LPWR, mut delay: hal::delay::Delay, interval: core::time::Duration) -> ! {
     let wakeup_source = TimerWakeupSource::new(interval);
 
-    let mut rtc = Rtc::new(rtc_cntl);
+    let mut rtc = Rtc::new(rtc_cntl,None);
 
 
     info!("Entering deep sleep for {interval:?}");

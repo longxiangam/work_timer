@@ -139,6 +139,18 @@ async fn process_http(socket:&mut TcpSocket<'_>,buffer:&str) {
             if let Err(e) = r {
                 println!("write error: {:?}", e);
             }
+        }else{
+            //默认
+            let content = concat!("HTTP/1.0 200 OK\r\n\r\n", include_str!("../files/config.html"));
+            let r = socket
+                .write_all(
+                    content.as_bytes()
+                )
+                .await;
+
+            if let Err(e) = r {
+                println!("write error: {:?}", e);
+            }
         }
     }
     if let Some("POST") = req.method {
@@ -255,3 +267,4 @@ fn parse_form<'a>(
         Ok(result)
     }
 }
+

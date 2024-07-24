@@ -6,7 +6,7 @@ use embassy_time::{Instant};
 
 use embedded_hal_async::digital::Wait;
 use esp_println::{ println};
-use hal::gpio::{Gpio0, Gpio1, Gpio13, Gpio5, Input };
+use hal::gpio::{Gpio0, Gpio1, Gpio13, Gpio5, Input, Pull};
 
 
 use crate::ec11::WheelDirection::{Back, Front, NoState};
@@ -82,8 +82,11 @@ const JUDGE_TIMES:u32 = 8;
 
 
 #[embassy_executor::task]
-pub async fn task(mut a_point :Input<'_,Gpio1>,mut b_point :Input<'_,Gpio0>,mut push_key:Input<'_,Gpio5>){
+pub async fn task(mut a_point :Gpio1,mut b_point :Gpio0,mut push_key:Gpio5){
     // 初始化编码器状态
+    let mut a_point = Input::new(a_point, Pull::Up);
+    let mut b_point = Input::new(b_point,Pull::Up);
+    let mut push_key = Input::new(push_key, Pull::Up);
 
     let mut begin_state = NoState;
 

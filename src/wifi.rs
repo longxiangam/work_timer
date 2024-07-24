@@ -16,16 +16,18 @@ use embassy_time::{Duration, Instant, Timer};
 use esp_println::{print, println};
 use esp_storage::FlashStorageError;
 use esp_wifi::{EspWifiInitFor, initialize};
-use esp_wifi::wifi::{AccessPointConfiguration, AuthMethod, ClientConfiguration, Configuration, WifiApDevice, WifiController, WifiDevice, WifiEvent, WifiStaDevice, WifiState};
+use esp_wifi::wifi::{AccessPointConfiguration, AuthMethod, ClientConfiguration, Configuration, WifiApDevice, WifiController, WifiDevice, WifiError, WifiEvent, WifiStaDevice, WifiState};
 use esp_wifi::wifi::ipv4::{ RouterConfiguration, SocketAddrV4};
 use hal::clock::Clocks;
-use hal::peripherals::{RADIO_CLK, SYSTIMER, WIFI};
+use hal::peripherals::{RADIO_CLK, SYSTIMER, TIMG0, WIFI};
 use hal::reset::software_reset;
 use hal::rng::Rng;
 use hal::system::SystemClockControl;
+use hal::timer::PeriodicTimer;
 use heapless::{String, Vec};
 use httparse::Header;
-use static_cell::{make_static, StaticCell};
+use static_cell::{ StaticCell};
+use crate::make_static;
 use crate::storage::{NvsStorage, WIFI_INFO};
 
 #[derive(Eq, PartialEq,Copy, Clone,Debug)]
@@ -51,8 +53,8 @@ pub enum WifiNetError {
 
 
 
-/*const SSID: &str = env!("SSID");
-const PASSWORD: &str = env!("PASSWORD");*/
+const SSID: &str = env!("SSID");
+const PASSWORD: &str = env!("PASSWORD");
 
 const HOW_LONG_SECS_CLOSE:u64 = 30;//20秒未使用wifi 断开
 
@@ -68,7 +70,7 @@ pub static mut AP_STACK_MUT: Option<&'static Stack<WifiDevice<'static, WifiApDev
 pub static HAL_RNG:Mutex<CriticalSectionRawMutex,Option<Rng>>  =  Mutex::new(None);
 pub static WIFI_MODEL:Mutex<CriticalSectionRawMutex,Option<WifiModel>> = Mutex::new(None);
 pub async fn connect_wifi(spawner: &Spawner,
-                          systimer: SYSTIMER,
+                          timg0: TIMG0,
                           rng: Rng,
                           wifi: WIFI,
                           radio_clk: RADIO_CLK,
@@ -77,7 +79,11 @@ pub async fn connect_wifi(spawner: &Spawner,
     REINIT_WIFI_SIGNAL.wait().await;
     HAL_RNG.lock().await.replace(rng);
 
-    let timer = hal::timer::systimer::SystemTimer::new(systimer).alarm0;
+    let timer = PeriodicTimer::new(
+        hal::timer::timg::TimerGroup::new(timg0, &clocks, None)
+            .timer0
+            .into(),
+    );
     let init = initialize(
         EspWifiInitFor::Wifi,
         timer,
@@ -139,10 +145,12 @@ pub async fn connect_wifi(spawner: &Spawner,
     let seed = 1234;
 
     // Init network stack
-    let stack = &*make_static!(Stack::new(
+    let stack = &*make_static!(
+        Stack<WifiDevice<'_, WifiStaDevice>>,
+        Stack::new(
         wifi_interface,
         config,
-        make_static!(StackResources::<3>::new()),
+        make_static!(StackResources::<3>,StackResources::<3>::new()),
         seed
     ));
 
@@ -224,12 +232,16 @@ async fn connection_wifi(mut controller: WifiController<'static>) {
             loop {
                 if let Some(ref wifi_info) = *WIFI_INFO.lock().await {
                     let client_config = Configuration::Client(ClientConfiguration {
-                        ssid:wifi_info.wifi_ssid.clone(), //SSID.try_into().unwrap(),
-                        password:wifi_info.wifi_password.clone(), //PASSWORD.try_into().unwrap(),
-                        auth_method: AuthMethod::None,
+                        ssid:SSID.try_into().unwrap(),//wifi_info.wifi_ssid.clone(), //SSID.try_into().unwrap(),
+                        password:PASSWORD.try_into().unwrap(),//wifi_info.wifi_password.clone(), //PASSWORD.try_into().unwrap(),
                         ..Default::default()
                     });
-                    controller.set_configuration(&client_config).unwrap();
+                    match controller.set_configuration(&client_config) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            println!("配置失败：{:?}",e);
+                        }
+                    }
                     println!("Starting wifi");
                     controller.start().await.unwrap();
                     println!("Wifi started!");
@@ -358,7 +370,7 @@ pub async fn force_stop_wifi(){
 
 /// ap 模式 配网
 pub async fn start_wifi_ap(spawner: &Spawner,
-                           systimer: SYSTIMER,
+                           timg0: TIMG0,
                            rng: Rng,
                            wifi: WIFI,
                            radio_clk: RADIO_CLK,
@@ -367,7 +379,11 @@ pub async fn start_wifi_ap(spawner: &Spawner,
 
     HAL_RNG.lock().await.replace(rng);
 
-    let timer = hal::timer::systimer::SystemTimer::new(systimer).alarm0;
+    let timer = PeriodicTimer::new(
+        hal::timer::timg::TimerGroup::new(timg0, &clocks, None)
+            .timer0
+            .into(),
+    );
     let init = initialize(
         EspWifiInitFor::Wifi,
         timer,
@@ -387,10 +403,11 @@ pub async fn start_wifi_ap(spawner: &Spawner,
         dns_servers: Default::default(),
     });
     let ap_stack: &Stack<WifiDevice<'static, WifiApDevice>> = &*make_static!(
+         Stack<WifiDevice<'_, WifiApDevice>>,
             Stack::new(
                 wifi_ap_interface,
                 ap_config,
-                make_static!( StackResources::<4>::new()),
+                make_static!(StackResources::<4>, StackResources::<4>::new()),
                 seed
             )
         );

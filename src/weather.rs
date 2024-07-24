@@ -2,7 +2,7 @@
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::mutex::Mutex;
 use esp_println::println;
-use static_cell::make_static;
+use crate::make_static;
 use crate::model::seniverse::{DailyResult, form_json};
 use crate::request::RequestClient;
 use crate::wifi::{finish_wifi, use_wifi};
@@ -62,7 +62,7 @@ pub fn get_weather() -> Option<&'static  Weather> {
 
 #[embassy_executor::task]
 pub async fn weather_worker() {
-    let weather = make_static!(Weather::new());
+    let weather = make_static!(Weather,Weather::new());
     unsafe {
         WEATHER.replace(weather);
     }

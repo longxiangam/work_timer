@@ -20,8 +20,8 @@ use hal::prelude::ram;
 use sntpc::{async_impl::{get_time,NtpUdpSocket }, NtpContext, NtpTimestampGenerator };
 use static_cell::{make_static, StaticCell};
 use time::{Duration, OffsetDateTime, UtcOffset, Weekday};
-use crate::pages::init_page::InitPage;
-use crate::pages::Page;
+/*use crate::pages::init_page::InitPage;*/
+
 use crate::sleep::{get_rtc_ms, get_sleep_ms};
 use crate::wifi::{finish_wifi, use_wifi};
 

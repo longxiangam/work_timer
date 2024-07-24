@@ -46,7 +46,7 @@ pub async fn to_sleep(sleep_time:Duration,idle_time:Duration){
         save_time_to_rtc().await;
 
         let mut delay = Delay::new(unsafe{CLOCKS_REF.unwrap()});
-        RTC_MANGE.lock().await.as_mut().unwrap().sleep_deep(ws.as_slice(), &mut delay);
+        RTC_MANGE.lock().await.as_mut().unwrap().sleep_deep(ws.as_slice());
 
     }
 }

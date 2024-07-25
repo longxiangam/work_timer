@@ -26,7 +26,7 @@ use crate::sleep::{get_rtc_ms, get_sleep_ms};
 use crate::wifi::{finish_wifi, use_wifi};
 
 
-const POOL_NTP_ADDR: &str = "pool.ntp.org";
+const POOL_NTP_ADDR: &str = "cn.pool.ntp.org";
 
 #[derive( Debug)]
 pub enum SntpcError {

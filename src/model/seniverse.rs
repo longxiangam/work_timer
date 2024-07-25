@@ -60,8 +60,15 @@ pub fn form_json(str:&[u8])->Option<DailyResponse>{
             let mut location:Option<Location> = None;
             let mut daily:Vec<Daily,5 > = Vec::new();
             let mut last_update:String<40> = String::new();
-            let temp_array = json_data.get("results").unwrap().get_array();
 
+            let results = json_data.get("results");
+            if let None = results {
+                return None;
+            }
+            let temp_array = results.unwrap().get_array();
+            if let None = temp_array {
+                return None;
+            }
             for result__ in temp_array.unwrap().iter() {
                 if let Some(location_obj)  = result__.get("location"){
                     let mut temp = Location::default();

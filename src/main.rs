@@ -14,7 +14,7 @@ mod random;
 mod storage;
 mod ec11;
 mod event;
-/*mod sound;*/
+mod sound;
 mod battery;
 mod utils;
 mod sleep;
@@ -27,7 +27,7 @@ mod chip8;
 mod widgets;
 mod pages;
 
-
+use alloc::format;
 use core::convert::Infallible;
 use esp_backtrace as _;
 use embassy_executor::Spawner;
@@ -39,7 +39,7 @@ use esp_wifi::wifi::WifiError;
 use hal::clock::{ClockControl, Clocks};
 use hal::dma::{Dma, DmaDescriptor};
 use hal::prelude::{_fugit_RateExtU32, main};
-use hal::{Cpu, entry};
+use hal::{Cpu, dma_descriptors, entry};
 use hal::analog::adc::{Adc, AdcConfig, Attenuation};
 use hal::gpio::{Gpio0, Gpio1, Gpio5, Io, Level, Output};
 use hal::peripheral::Peripheral;
@@ -61,6 +61,7 @@ use crate::battery::Battery;
 use crate::pages::init_page::InitPage;
 use crate::pages::Page;
 use crate::sleep::{add_rtcio, refresh_active_time, RTC_MANGE};
+use crate::sound::{buzzer_task, PWM_PLAYER, PwmPlayer};
 use crate::storage::{enter_process, init_storage_area, WIFI_INFO};
 use crate::weather::weather_worker;
 use crate::wifi::{connect_wifi, start_wifi_ap, WIFI_MODEL, WifiModel};
@@ -117,6 +118,15 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error> {
     enter_process().await;
 
     let mut io = Io::new(peripherals.GPIO, peripherals.IO_MUX);
+    let mut buzzer =io.pins.gpio13;
+    buzzer.set_low();
+
+    let mut pwm_player =  PwmPlayer::init(peripherals.LEDC, clocks, buzzer);
+    unsafe {
+        PWM_PLAYER.replace(pwm_player);
+    }
+
+    spawner.spawn(buzzer_task()).ok();
 
     let epd_sclk = io.pins.gpio6;
     let epd_mosi = io.pins.gpio7;
@@ -127,11 +137,12 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error> {
     let dma = Dma::new(peripherals.DMA);
     let dma_channel = dma.channel0;
 
-    let descriptors: &'static mut _ = DESCRIPTORS.init([DmaDescriptor::EMPTY; DESCRIPTORS_SIZE]);
+/*    let descriptors: &'static mut _ = DESCRIPTORS.init([DmaDescriptor::EMPTY; DESCRIPTORS_SIZE]);
     let rx_descriptors: &'static mut _ =
         RX_DESCRIPTORS.init([DmaDescriptor::EMPTY; DESCRIPTORS_SIZE]);
 
-
+*/
+    let (descriptors, rx_descriptors) = dma_descriptors!(32000);
 
     let spi_bus = Spi::new(peripherals.SPI2, 48_u32.MHz(), SpiMode::Mode0, &clocks)
         .with_sck(epd_sclk)
@@ -139,9 +150,11 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error> {
 
 
 
+    //burst_mode 为false时会导致显示一段时间后花屏或其他显示异常
+    //burst_mode 连续传输：在 burst mode 下，多个字节的数据在一次传输操作中连续发送或接收，没有中断。这与单字节模式（byte-by-byte mode）不同，后者在每个字节之间可能会有延迟或中断。
     //:  SpiDma<'static, SPI2, Channel0, FullDuplexMode,Async>
     let spi_dma = spi_bus.with_dma(
-        dma_channel.configure_for_async(false, DmaPriority::Priority0),
+        dma_channel.configure_for_async(true, DmaPriority::Priority0),
         descriptors,
         rx_descriptors,
     );
@@ -173,6 +186,7 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error> {
     spawner.spawn(event::run(key1,key2,key3)).ok();
 
 
+
     type AdcCal = hal::analog::adc::AdcCalCurve<ADC1>;
 
     let mut adc1_config = AdcConfig::new();
@@ -182,14 +196,14 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error> {
     let battery = Battery::new(adc1);
     battery::BATTERY.lock().await.replace(battery);
     battery::ADC_PIN.lock().await.replace(adc1_pin);
-  /*  spawner.spawn(crate::battery::test_bat_adc()).ok();*/
+    spawner.spawn(crate::battery::test_bat_adc()).ok();
     //连接wifi
     let mut need_ap = false;
     refresh_active_time().await;
 
     println!("start wifi");
 
-  /*  loop {
+/*    loop {
         println!("entry need_ap 1");
         if let Some(wifi) = WIFI_INFO.lock().await.as_ref(){
             println!("wifi_finish:{:?}",wifi.wifi_finish);
@@ -204,7 +218,7 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error> {
         println!("entry need_ap");
         Timer::after(Duration::from_millis(50)).await;
     }*/
-    println!("entry need_ap");
+
     if  need_ap {
         println!("entry ap");
         WIFI_MODEL.lock().await.replace(WifiModel::AP);
@@ -242,7 +256,12 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error> {
                                  clocks).await;
         //init_page.append_log("已连接wifi").await;
     }
-
+/*    let mut times = 1;
+    loop {
+        init_page.append_log(format!("times:{}",times).as_str()).await;
+        times +=1;
+        Timer::after(Duration::from_millis(1)).await;
+    }*/
 
     loop {
         if let Some(clock) =  get_clock(){

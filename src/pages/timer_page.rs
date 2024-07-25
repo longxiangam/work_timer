@@ -32,7 +32,7 @@ use crate::event::EventType;
 use crate::pages::{ Page};
 use crate::pages::main_page::MainPage;
 use crate::request::{RequestClient, ResponseData};
-/*use crate::sound::{player_buzzer, SoundType, stop_buzzer};*/
+use crate::sound::{player_buzzer, SoundType, stop_buzzer};
 use crate::wifi::use_wifi;
 use crate::worldtime::{CLOCK_SYNC_TIME_SECOND, get_clock};
 
@@ -104,7 +104,7 @@ impl TimerPage {
             if self.current_count == 0 {
                 self.finished = true;
                 println!("player");
-               // player_buzzer(SoundType::Music(1)).await;
+                player_buzzer(SoundType::Music(1)).await;
             }
         }
 
@@ -112,7 +112,7 @@ impl TimerPage {
     }
 
     async fn back(&mut self){
-       // stop_buzzer().await;
+        stop_buzzer().await;
         self.running = false;
     }
 
@@ -123,7 +123,7 @@ impl TimerPage {
         if self.finished {
             self.starting = false;
             self.finished = false;
-            //stop_buzzer().await;
+            stop_buzzer().await;
             return;
         }
 

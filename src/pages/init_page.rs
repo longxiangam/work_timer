@@ -43,6 +43,9 @@ impl InitPage{
                     display,
                 );
                 self.top += 20;
+                if self.top as u32 > display.size().height-20{
+                    self.top  = 0;
+                }
                 RENDER_CHANNEL.send(RenderInfo { time: 0 }).await;
                 break;
             }

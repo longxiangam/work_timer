@@ -28,6 +28,7 @@ mod widgets;
 mod pages;
 
 use alloc::format;
+use alloc::string::ToString;
 use core::convert::Infallible;
 use esp_backtrace as _;
 use embassy_executor::Spawner;
@@ -265,28 +266,19 @@ async fn main_fallible(spawner: &Spawner)->Result<(),Error> {
 
     loop {
         if let Some(clock) =  get_clock(){
-            println!("Current_time: {}", clock.get_date_str().await);
+            let local = clock.local().await;
+            let hour = local.hour();
+            let minute = local.minute();
+            let second = local.second();
+            let str = format_args!("{:02}:{:02}:{:02}",hour,minute,second).to_string();
+
+            println!("Current_time: {} {}", clock.get_date_str().await,str);
         }
         Timer::after(Duration::from_secs(10)).await;
 
     }
 }
-#[embassy_executor::task]
-pub async fn  do_loop(num:u32){
-    loop{
-        println!("do_loop,{}",num);
-        Timer::after(Duration::from_secs(1)).await;
-    }
 
-}
-#[embassy_executor::task]
-pub async fn  do_loop2(num:u32){
-    loop{
-        println!("do_loop,{}",num);
-        Timer::after(Duration::from_secs(1)).await;
-    }
-
-}
 /// An error
 #[derive(Debug)]
 enum Error {

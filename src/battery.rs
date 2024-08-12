@@ -47,13 +47,13 @@ pub async fn test_bat_adc(){
                         percent = percent.min(100);
                         v.percent =  percent;
 
-                        println!("adc_value:{:?}",adc_value);
+                    /*    println!("adc_value:{:?}",adc_value);
                         println!("current_v:{:?}",current_v);
                         println!("电量:{:?}",v.voltage);
-                        println!("百分比:{:?}", v.percent);
+                        println!("百分比:{:?}", v.percent);*/
                     }
                     Err(e) => {
-                        println!("error:{:?}",e);
+                        //println!("error:{:?}",e);
                     }
                 }
             }

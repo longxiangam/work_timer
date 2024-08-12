@@ -1,11 +1,13 @@
+use core::convert::Infallible;
+use embassy_futures::select::{Either, select};
 use embassy_sync::blocking_mutex::raw::CriticalSectionRawMutex;
 use embassy_sync::channel::Channel;
-use embassy_time::{Delay, Duration,  Timer};
+use embassy_time::{Delay, Duration, TimeoutError, Timer, with_timeout};
 use embedded_graphics::draw_target::DrawTarget;
 use embedded_graphics::geometry::Point;
 use embedded_graphics::mono_font::MonoTextStyleBuilder;
 use embedded_graphics::text::{Baseline, Text, TextStyleBuilder};
-use embedded_hal_bus::spi::ExclusiveDevice;
+use embedded_hal_bus::spi::{DeviceError, ExclusiveDevice};
 
 use hal::dma::Channel0;
 use hal::gpio::{Gpio10, Gpio2, Gpio3, Input, Level, Output};
@@ -16,8 +18,9 @@ use lcd_drivers::prelude::WaveshareDisplay;
 use lcd_drivers::color::TwoBitColor;
 use lcd_drivers::uc1638::prelude::Display2in7;
 use embedded_graphics::{Drawable };
+use esp_println::println;
 use hal::Async;
-use hal::spi::{FullDuplexMode, SpiDataMode, SpiMode};
+use hal::spi::{Error, FullDuplexMode, SpiDataMode, SpiMode};
 use lcd_drivers::graphics::TwoBitColorDisplay as _;
 
 pub struct RenderInfo{
@@ -50,6 +53,7 @@ pub async  fn render(mut spi:  SpiDma<'static, SPI2, Channel0, FullDuplexMode,As
     const PAGE_SIZE: usize = 240;  // 每页的长度
     loop {
 
+        println!("wait render");
 
         let render_info = receiver.receive().await;
 
@@ -58,7 +62,18 @@ pub async  fn render(mut spi:  SpiDma<'static, SPI2, Channel0, FullDuplexMode,As
         lcd.goto(&mut spi_device,0,0).await;
         let mut current_page = 0;
 
-        lcd.put_char(&mut spi_device, &buffer).await;
+        let work = lcd.put_char(&mut spi_device, &buffer);
+        println!("begin render");
+        match  with_timeout(Duration::from_secs(1),work).await{
+            Ok(_) => {
+                println!("render success");
+            }
+            Err(_) => {
+                println!("render timeout");
+            }
+        }
+
+        println!("end render");
         //分页写入
         /*while current_page * PAGE_SIZE < len {
             let start = current_page * PAGE_SIZE;

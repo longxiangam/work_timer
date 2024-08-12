@@ -92,12 +92,36 @@ pub struct WeatherStorage{
     token:heapless::String<64>
 }
 
-const OTHER_STORAGE_OFFSET:usize = WEATHER_STORAGE_OFFSET + size_of::<WifiStorage>();
+const OTHER_STORAGE_OFFSET:usize = WEATHER_STORAGE_OFFSET + size_of::<WeatherStorage>();
 
 #[derive(Debug,Default)]
 pub struct OtherStorage{
     token:heapless::String<64>
 }
+const TIMER_LOG_OFFSET:usize = OTHER_STORAGE_OFFSET + size_of::<OtherStorage>();
+
+#[derive(Debug)]
+pub struct TimerLogStateStorage{
+    timer_states:[u8;100], //标识是否有记录，记录是否同步
+    cursor: u8,//游标，与timer_states 长度对应
+}
+
+impl TimerLogStateStorage{
+    //增加一个记录,并移动游标
+    fn add_log(){
+
+    }
+
+
+    //同步记录,遍历所有标识数组，同步待同步记录至服务器
+    fn sync(){
+
+    }
+
+}
+
+const TIMER_LOG_END_OFFSET:usize = TIMER_LOG_OFFSET + size_of::<TimerLogStateStorage>();
+
 
 // 为各个存储结构体实现 NvsStorage trait
 impl_storage!(VersionStorage, VERSION_STORAGE_OFFSET);
